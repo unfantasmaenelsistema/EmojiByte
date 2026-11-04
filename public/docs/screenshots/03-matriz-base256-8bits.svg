@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" width="1200" height="620">
+  <defs>
+    <style>
+      .sans { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace; }
+    </style>
+  </defs>
+
+  <!-- Fondo Principal Dark Slate -->
+  <rect width="1200" height="620" rx="14" fill="#020617" />
+  <rect x="1" y="1" width="1198" height="618" rx="13" fill="none" stroke="#1e293b" stroke-width="2" />
+
+  <!-- Encabezado -->
+  <text x="44" y="48" fill="#fb7185" font-size="12" font-weight="600" class="sans">03. Arquitectura Biyectiva de 8 Bits (2⁸ = 256 Estados)</text>
+  <text x="44" y="80" fill="#ffffff" font-size="26" font-weight="700" class="sans">Matriz Completa del Alfabeto Base256 (0x00 – 0xFF)</text>
+  <text x="44" y="106" fill="#94a3b8" font-size="13" class="sans">Conmutador binario interactivo de 8 bits y tabla de correspondencia 1:1 entre octetos y puntos de código Unicode.</text>
+
+  <!-- Columna Izquierda: Inspector de 8 Bits -->
+  <rect x="44" y="132" width="380" height="448" rx="12" fill="#0f172a" stroke="#1e293b" />
+  <rect x="68" y="156" width="68" height="68" rx="12" fill="#020617" stroke="#f43f5e" stroke-width="1.5" />
+  <text x="102" y="202" text-anchor="middle" font-size="38">😐</text>
+  <text x="152" y="172" fill="#94a3b8" font-size="12" class="sans">Octeto Seleccionado</text>
+  <text x="152" y="198" fill="#ffffff" font-size="22" font-weight="700" class="mono">0x41 · Dec 65</text>
+  <text x="152" y="218" fill="#64748b" font-size="12" class="mono">Unicode U+1F610 · ASCII: 'A'</text>
+
+  <line x1="68" y1="242" x2="400" y2="242" stroke="#1e293b" />
+  <text x="68" y="268" fill="#e2e8f0" font-size="12" font-weight="600" class="sans">Registro Binario Interactivo (8 bits)</text>
+  <text x="400" y="268" text-anchor="end" fill="#64748b" font-size="11" class="mono">01000001</text>
+
+  <!-- 8 Interruptores Binarios: 0 1 0 0 0 0 0 1 (64 + 1 = 65) -->
+  <g transform="translate(68, 282)">
+    <!-- b7: 0 (128) -->
+    <rect x="0" y="0" width="36" height="56" rx="7" fill="#020617" stroke="#1e293b" />
+    <text x="18" y="26" text-anchor="middle" fill="#94a3b8" font-size="14" class="mono">0</text>
+    <text x="18" y="45" text-anchor="middle" fill="#64748b" font-size="10" class="mono">128</text>
+    <!-- b6: 1 (64) -->
+    <rect x="42" y="0" width="36" height="56" rx="7" fill="#e11d48" stroke="#f43f5e" />
+    <text x="60" y="26" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700" class="mono">1</text>
+    <text x="60" y="45" text-anchor="middle" fill="#ffe4e6" font-size="10" class="mono">64</text>
+    <!-- b5: 0 (32) -->
+    <rect x="84" y="0" width="36" height="56" rx="7" fill="#020617" stroke="#1e293b" />
+    <text x="102" y="26" text-anchor="middle" fill="#94a3b8" font-size="14" class="mono">0</text>
+    <text x="102" y="45" text-anchor="middle" fill="#64748b" font-size="10" class="mono">32</text>
+    <!-- b4: 0 (16) -->
+    <rect x="126" y="0" width="36" height="56" rx="7" fill="#020617" stroke="#1e293b" />
+    <text x="144" y="26" text-anchor="middle" fill="#94a3b8" font-size="14" class="mono">0</text>
+    <text x="144" y="45" text-anchor="middle" fill="#64748b" font-size="10" class="mono">16</text>
+    <!-- b3: 0 (8) -->
+    <rect x="168" y="0" width="36" height="56" rx="7" fill="#020617" stroke="#1e293b" />
+    <text x="186" y="26" text-anchor="middle" fill="#94a3b8" font-size="14" class="mono">0</text>
+    <text x="186" y="45" text-anchor="middle" fill="#64748b" font-size="10" class="mono">8</text>
+    <!-- b2: 0 (4) -->
+    <rect x="210" y="0" width="36" height="56" rx="7" fill="#020617" stroke="#1e293b" />
+    <text x="228" y="26" text-anchor="middle" fill="#94a3b8" font-size="14" class="mono">0</text>
+    <text x="228" y="45" text-anchor="middle" fill="#64748b" font-size="10" class="mono">4</text>
+    <!-- b1: 0 (2) -->
+    <rect x="252" y="0" width="36" height="56" rx="7" fill="#020617" stroke="#1e293b" />
+    <text x="270" y="26" text-anchor="middle" fill="#94a3b8" font-size="14" class="mono">0</text>
+    <text x="270" y="45" text-anchor="middle" fill="#64748b" font-size="10" class="mono">2</text>
+    <!-- b0: 1 (1) -->
+    <rect x="294" y="0" width="38" height="56" rx="7" fill="#e11d48" stroke="#f43f5e" />
+    <text x="313" y="26" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="700" class="mono">1</text>
+    <text x="313" y="45" text-anchor="middle" fill="#ffe4e6" font-size="10" class="mono">1</text>
+  </g>
+
+  <text x="68" y="372" fill="#94a3b8" font-size="12" class="sans">Equivalencia del byte 0x41 en los 3 diccionarios:</text>
+  <rect x="68" y="384" width="104" height="64" rx="8" fill="#1e293b" stroke="#475569" />
+  <text x="120" y="414" text-anchor="middle" font-size="22">😐</text>
+  <text x="120" y="436" text-anchor="middle" fill="#f8fafc" font-size="11" font-weight="600" class="sans">Expresivo</text>
+
+  <rect x="182" y="384" width="104" height="64" rx="8" fill="#020617" stroke="#1e293b" />
+  <text x="234" y="414" text-anchor="middle" font-size="22">🦀</text>
+  <text x="234" y="436" text-anchor="middle" fill="#94a3b8" font-size="11" class="sans">Naturaleza</text>
+
+  <rect x="296" y="384" width="104" height="64" rx="8" fill="#020617" stroke="#1e293b" />
+  <text x="348" y="414" text-anchor="middle" font-size="22">💡</text>
+  <text x="348" y="436" text-anchor="middle" fill="#94a3b8" font-size="11" class="sans">Artefactos</text>
+
+  <rect x="68" y="468" width="332" height="38" rx="8" fill="#e11d48" />
+  <text x="234" y="492" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="600" class="sans">+ Insertar Octeto en Codificador</text>
+
+  <!-- Columna Derecha: Matriz 0x00 - 0xFF -->
+  <rect x="448" y="132" width="708" height="448" rx="12" fill="#0f172a" stroke="#1e293b" />
+  <rect x="472" y="156" width="480" height="34" rx="8" fill="#020617" stroke="#1e293b" />
+  <text x="490" y="177" fill="#64748b" font-size="12" class="sans">🔍 Buscar por Hex (41, 0xFF), Decimal (65), Binario (01000001) o Emoji...</text>
+  <text x="1132" y="177" text-anchor="end" fill="#94a3b8" font-size="12" class="mono">256 / 256 octetos</text>
+
+  <!-- Cuadrícula representativa de octetos -->
+  <g transform="translate(472, 208)" class="mono" font-size="11" text-anchor="middle">
+    <!-- Fila 0x00 - 0x09 -->
+    <rect x="0" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="30" y="30" font-size="22">😀</text><text x="30" y="52" fill="#64748b">00</text>
+    <rect x="66" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="96" y="30" font-size="22">😁</text><text x="96" y="52" fill="#64748b">01</text>
+    <rect x="132" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="162" y="30" font-size="22">😂</text><text x="162" y="52" fill="#64748b">02</text>
+    <rect x="198" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="228" y="30" font-size="22">😃</text><text x="228" y="52" fill="#64748b">03</text>
+    <rect x="264" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="294" y="30" font-size="22">😄</text><text x="294" y="52" fill="#64748b">04</text>
+    <rect x="330" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="360" y="30" font-size="22">😅</text><text x="360" y="52" fill="#64748b">05</text>
+    <rect x="396" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="426" y="30" font-size="22">😆</text><text x="426" y="52" fill="#64748b">06</text>
+    <rect x="462" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="492" y="30" font-size="22">😇</text><text x="492" y="52" fill="#64748b">07</text>
+    <rect x="528" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="558" y="30" font-size="22">😈</text><text x="558" y="52" fill="#64748b">08</text>
+    <rect x="594" y="0" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="624" y="30" font-size="22">😉</text><text x="624" y="52" fill="#64748b">09</text>
+
+    <!-- Fila 0x40 - 0x49 (con 0x41 activo) -->
+    <rect x="0" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="30" y="102" font-size="22">😺</text><text x="30" y="124" fill="#64748b">40</text>
+    <rect x="66" y="72" width="60" height="62" rx="8" fill="#4c0519" stroke="#f43f5e" stroke-width="2" /><text x="96" y="102" font-size="22">😐</text><text x="96" y="124" fill="#fb7185" font-weight="700">41</text>
+    <rect x="132" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="162" y="102" font-size="22">😑</text><text x="162" y="124" fill="#64748b">42</text>
+    <rect x="198" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="228" y="102" font-size="22">😶</text><text x="228" y="124" fill="#64748b">43</text>
+    <rect x="264" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="294" y="102" font-size="22">🙄</text><text x="294" y="124" fill="#64748b">44</text>
+    <rect x="330" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="360" y="102" font-size="22">😏</text><text x="360" y="124" fill="#64748b">45</text>
+    <rect x="396" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="426" y="102" font-size="22">🙆</text><text x="426" y="124" fill="#64748b">46</text>
+    <rect x="462" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="492" y="102" font-size="22">🙇</text><text x="492" y="124" fill="#64748b">47</text>
+    <rect x="528" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="558" y="102" font-size="22">🙈</text><text x="558" y="124" fill="#64748b">48</text>
+    <rect x="594" y="72" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="624" y="102" font-size="22">🙉</text><text x="624" y="124" fill="#64748b">49</text>
+
+    <!-- Fila 0x80 - 0x89 -->
+    <rect x="0" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="30" y="174" font-size="22">🍅</text><text x="30" y="196" fill="#64748b">80</text>
+    <rect x="66" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="96" y="174" font-size="22">🍆</text><text x="96" y="196" fill="#64748b">81</text>
+    <rect x="132" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="162" y="174" font-size="22">🍇</text><text x="162" y="196" fill="#64748b">82</text>
+    <rect x="198" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="228" y="174" font-size="22">🍈</text><text x="228" y="196" fill="#64748b">83</text>
+    <rect x="264" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="294" y="174" font-size="22">🍉</text><text x="294" y="196" fill="#64748b">84</text>
+    <rect x="330" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="360" y="174" font-size="22">🍊</text><text x="360" y="196" fill="#64748b">85</text>
+    <rect x="396" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="426" y="174" font-size="22">🍋</text><text x="426" y="196" fill="#64748b">86</text>
+    <rect x="462" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="492" y="174" font-size="22">🍌</text><text x="492" y="196" fill="#64748b">87</text>
+    <rect x="528" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="558" y="174" font-size="22">🍍</text><text x="558" y="196" fill="#64748b">88</text>
+    <rect x="594" y="144" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="624" y="174" font-size="22">🍎</text><text x="624" y="196" fill="#64748b">89</text>
+
+    <!-- Fila 0xF6 - 0xFF -->
+    <rect x="0" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="30" y="246" font-size="22">🚀</text><text x="30" y="268" fill="#64748b">F6</text>
+    <rect x="66" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="96" y="246" font-size="22">🚁</text><text x="96" y="268" fill="#64748b">F7</text>
+    <rect x="132" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="162" y="246" font-size="22">🚂</text><text x="162" y="268" fill="#64748b">F8</text>
+    <rect x="198" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="228" y="246" font-size="22">🚃</text><text x="228" y="268" fill="#64748b">F9</text>
+    <rect x="264" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="294" y="246" font-size="22">🚄</text><text x="294" y="268" fill="#64748b">FA</text>
+    <rect x="330" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="360" y="246" font-size="22">🚅</text><text x="360" y="268" fill="#64748b">FB</text>
+    <rect x="396" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="426" y="246" font-size="22">🚆</text><text x="426" y="268" fill="#64748b">FC</text>
+    <rect x="462" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="492" y="246" font-size="22">🚇</text><text x="492" y="268" fill="#64748b">FD</text>
+    <rect x="528" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="558" y="246" font-size="22">🚈</text><text x="558" y="268" fill="#64748b">FE</text>
+    <rect x="594" y="216" width="60" height="62" rx="8" fill="#020617" stroke="#1e293b" /><text x="624" y="246" font-size="22">🚉</text><text x="624" y="268" fill="#64748b">FF</text>
+  </g>
+</svg>

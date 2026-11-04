@@ -1,0 +1,6 @@
+{
+  "name": "EmojiByte — Codificador Base256 y Hashes Visuales",
+  "description": "Aplicación educativa y profesional para codificar cadenas ASCII, UTF-8 y objetos byte en emoticonos (Base256) y visualizar hashes criptográficos, por Un Fantasma en el Sistema.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
