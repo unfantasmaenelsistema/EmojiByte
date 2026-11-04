@@ -63,9 +63,13 @@ export const AlphabetMatrixExplorer: React.FC<AlphabetMatrixExplorerProps> = ({
   };
 
   const handleCopyEmoji = (em: string) => {
-    navigator.clipboard.writeText(em);
-    setCopiedEmoji(true);
-    setTimeout(() => setCopiedEmoji(false), 1500);
+    navigator.clipboard
+      .writeText(em)
+      .then(() => {
+        setCopiedEmoji(true);
+        setTimeout(() => setCopiedEmoji(false), 1500);
+      })
+      .catch(() => undefined);
   };
 
   return (
@@ -145,6 +149,8 @@ export const AlphabetMatrixExplorer: React.FC<AlphabetMatrixExplorerProps> = ({
                     key={bitPos}
                     type="button"
                     onClick={() => toggleBit(bitPos)}
+                    aria-label={`Bit ${bitPos} (valor ${weight})`}
+                    aria-pressed={isOn}
                     className={`py-2 px-1 rounded-lg border font-mono text-center transition-colors ${
                       isOn
                         ? 'bg-rose-600 border-rose-500 text-white font-bold'

@@ -24,21 +24,21 @@ interface HashPreset {
 const HASH_PRESETS: HashPreset[] = [
   {
     id: 'avalanche',
-    label: 'Efecto Avalancha (1 carácter)',
-    description: 'Cambiar una sola letra minúscula por mayúscula altera ~50% de los bits y todos los emoticonos del hash.',
+    label: 'Efecto avalancha (1 carácter)',
+    description: 'Cambiar un solo dígito de la cuenta (…4502 → …4503) altera ~50 % de los bits del hash y casi todos sus emojis.',
     inputA: 'Transferir 1000 EUR a la cuenta ES91-2100-0418-4502',
     inputB: 'Transferir 1000 EUR a la cuenta ES91-2100-0418-4503',
   },
   {
     id: 'identical',
-    label: 'Verificación Íntegra (Idénticos)',
+    label: 'Verificación íntegra (idénticos)',
     description: 'Dos archivos o mensajes idénticos producen exactamente la misma secuencia gráfica de 32 emoticonos.',
     inputA: 'sha256sum: linux-kernel-6.12-x86_64.iso [OFICIAL]',
     inputB: 'sha256sum: linux-kernel-6.12-x86_64.iso [OFICIAL]',
   },
   {
     id: 'homoglyph',
-    label: 'Detección de Ataque Homoglifo',
+    label: 'Ataque homoglifo',
     description: 'Un atacante sustituye una "a" latina (0x61) por una "а" cirílica (U+0430). El texto parece igual, pero el hash visual cambia por completo.',
     inputA: 'https://www.unfantasmaenelsistema.com/auth',
     inputB: 'https://www.unfаntasmaenelsistema.com/auth',
@@ -100,9 +100,13 @@ export const HashComparatorLab: React.FC<HashComparatorLabProps> = ({ dictionary
     .join('');
 
   const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1800);
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 1800);
+      })
+      .catch(() => undefined);
   };
 
   return (
@@ -116,8 +120,16 @@ export const HashComparatorLab: React.FC<HashComparatorLabProps> = ({ dictionary
             Visualizador y Comparador Gráfico de Hashes
           </h2>
           <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400 max-w-3xl">
-            Comparar 64 caracteres hexadecimales a simple vista es propenso a errores humanos (ataques de colisión parcial de prefijo/sufijo). Al codificar cada byte del resumen criptográfico en un emoticono único (Base256), un hash SHA-256 de 32 bytes se reduce a 32 iconos altamente distinguibles.
+            Comparar 64 caracteres hexadecimales a simple vista cansa, y mucha gente acaba mirando solo el principio y el final: un atacante solo necesita acertar esos caracteres. Al codificar cada byte del resumen en un emoji (Base256), un SHA-256 de 32 bytes se queda en 32 iconos, más fáciles de comparar de un vistazo.
           </p>
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 max-w-3xl">
+            Ojo: es una ayuda visual, no una prueba. Hay emojis muy parecidos entre sí (😀 😃 😄), así que para verificar de verdad compara el hash completo; esta herramienta lo hace byte a byte y te dice cuántos bits difieren.
+          </p>
+          {algorithm === 'SHA-1' && (
+            <p className="mt-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 max-w-3xl">
+              ▲ SHA-1 está roto frente a colisiones desde 2017 (ataque SHAttered): se muestra por comparación, pero no lo uses para verificar integridad.
+            </p>
+          )}
         </div>
 
         {/* Selector de Algoritmo */}
@@ -413,13 +425,13 @@ export const HashComparatorLab: React.FC<HashComparatorLabProps> = ({ dictionary
             <div>
               <div className="text-sm font-semibold text-slate-900 dark:text-white">
                 {isIdentical
-                  ? '▲ COINCIDENCIA CRIPTOGRÁFICA EXACTA (100% ÍNTEGRO)'
-                  : '▼ DIVERGENCIA DETECTADA — EFECTO AVALANCHA ACTIVO'}
+                  ? '▲ Hashes idénticos'
+                  : '▼ Los hashes son distintos: efecto avalancha'}
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                 {isIdentical
                   ? 'Ambos bloques generan el mismo resumen binario y exactamente la misma matriz de emoticonos.'
-                  : `De ${hashBytesA.length} bytes totales, ${hamming.differingBytes} emoticonos han mutado. En una función hash ideal, cualquier cambio altera ~50% de los bits.`}
+                  : `De ${hashBytesA.length} bytes, ${hamming.differingBytes} emojis han cambiado. En una buena función hash, cualquier cambio en la entrada altera de media el 50 % de los bits de salida.`}
               </p>
             </div>
           </div>
