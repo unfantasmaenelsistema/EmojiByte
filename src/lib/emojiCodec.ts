@@ -1,7 +1,7 @@
 /**
- * Motor de Codificación Biyectiva Base256 con Emojis, Checksum CRC-8,
- * Camuflaje Esteganográfico y Visualización Criptográfica de Hashes.
- * Desarrollado para despliegue estático 100% cliente (GitHub Pages).
+ * Motor de codificación biyectiva Base256 con emojis, suma de verificación CRC-8,
+ * cifrado AES-256-GCM opcional (clave derivada con PBKDF2), plantillas de camuflaje
+ * y visualización de hashes. Todo se ejecuta en el navegador (GitHub Pages).
  */
 
 export type DictionaryId = 'standard' | 'nature' | 'artifacts';
@@ -17,222 +17,252 @@ export interface DictionaryMeta {
 }
 
 /**
- * Genera una lista determinista de 256 emojis de punto de código único (sin ZWJ)
- * a partir de bloques Unicode seguros y ampliamente soportados en todas las plataformas.
+ * Rangos fijos de puntos de código de cada alfabeto. Son constantes a propósito:
+ * el emisor y el receptor deben obtener exactamente la misma tabla, así que la
+ * paleta no puede depender de los datos Unicode del navegador que la ejecute.
+ *
+ * Reglas que cumplen (las comprueban los tests):
+ *  - 256 puntos de código por alfabeto, sin repetidos.
+ *  - Los tres alfabetos son disjuntos: un emoji pertenece a un solo alfabeto,
+ *    así la autodetección nunca es ambigua.
+ *  - Todos tienen presentación emoji por defecto (Emoji_Presentation): se ven en
+ *    color sin necesitar el selector de variación U+FE0F. Quedan fuera los que se
+ *    pintan como texto (👁 🍽 🐿 🌶 📽) o que no son emoji (U+1F4FE), y los
+ *    modificadores de tono de piel.
  */
-function buildVerified256Palette(seedRanges: Array<[number, number]>): string[] {
-  const result: string[] = [];
-  const seen = new Set<string>();
+const PALETTE_RANGES: Record<DictionaryId, Array<[number, number]>> = {
+  // Caras, gestos, personas, corazones y fiesta
+  standard: [
+    [0x1f600, 0x1f64f], // 80 caras clásicas
+    [0x1f910, 0x1f92f], // 32 caras suplementarias
+    [0x1f970, 0x1f971], // 🥰 🥱
+    [0x1f973, 0x1f976], // 🥳 🥴 🥵 🥶
+    [0x1f97a, 0x1f97a], // 🥺
+    [0x1f440, 0x1f440], // 👀
+    [0x1f442, 0x1f49f], // 94 cuerpo, ropa, personas, corazones
+    [0x1f380, 0x1f393], // 20 celebración
+    [0x1f3a0, 0x1f3b5], // 22 feria, cine y música
+  ],
+  // Fauna, flora, clima y gastronomía
+  nature: [
+    [0x1f400, 0x1f43e], // 63 animales
+    [0x1f980, 0x1f9a2], // 35 animales suplementarios
+    [0x1f9a5, 0x1f9aa], // 6 animales (Unicode 12)
+    [0x1f9ae, 0x1f9ae], // 🦮
+    [0x1f330, 0x1f335], // 6 plantas
+    [0x1f337, 0x1f344], // 14 flores, hojas y setas
+    [0x1f300, 0x1f320], // 33 clima, océano, luna y cosmos
+    [0x1f345, 0x1f37c], // 56 frutas, comida y bebida
+    [0x1f37e, 0x1f37f], // 🍾 🍿
+    [0x1f950, 0x1f96f], // 32 comida suplementaria
+    [0x1f9c0, 0x1f9c2], // 🧀 🧁 🧂
+    [0x1f32d, 0x1f32f], // 🌭 🌮 🌯
+    [0x1f9c3, 0x1f9c4], // 🧃 🧄
+  ],
+  // Objetos, tecnología, símbolos, transporte y relojes
+  artifacts: [
+    [0x1f4a0, 0x1f4fc], // 93 oficina, dinero, informática y comunicación
+    [0x1f4ff, 0x1f4ff], // 📿
+    [0x1f500, 0x1f53d], // 62 símbolos técnicos, candados y llaves
+    [0x1f680, 0x1f6c5], // 70 transporte y señales
+    [0x1f3b6, 0x1f3c4], // 15 música, juegos y deporte
+    [0x1f3c6, 0x1f3ca], // 5 trofeo y deporte
+    [0x1f550, 0x1f559], // 10 relojes
+  ],
+};
 
-  // Puntos de código que no son emojis visuales claros o son modificadores de tono de piel
-  const excluded = new Set<number>([
-    0x1f3fb, 0x1f3fc, 0x1f3fd, 0x1f3fe, 0x1f3ff, // Modificadores Fitzpatrick
-    0x1f549, 0x1f54a, 0x1f54b, 0x1f54c, 0x1f54d, 0x1f54e, 0x1f54f,
-    0x1f6d0, 0x1f6d3, 0x1f6d4, 0x1f6d5, 0x1f6d6, 0x1f6d7,
-  ]);
-
-  for (const [start, end] of seedRanges) {
-    for (let cp = start; cp <= end; cp++) {
-      if (excluded.has(cp)) continue;
-      const ch = String.fromCodePoint(cp);
-      if (!seen.has(ch)) {
-        seen.add(ch);
-        result.push(ch);
-        if (result.length === 256) return result;
-      }
-    }
+function buildPalette(id: DictionaryId): string[] {
+  const out: string[] = [];
+  for (const [start, end] of PALETTE_RANGES[id]) {
+    for (let cp = start; cp <= end; cp++) out.push(String.fromCodePoint(cp));
   }
-
-  // Relleno de seguridad si algún rango quedó corto
-  for (let cp = 0x1f600; cp <= 0x1f64f && result.length < 256; cp++) {
-    const ch = String.fromCodePoint(cp);
-    if (!seen.has(ch)) {
-      seen.add(ch);
-      result.push(ch);
-    }
+  if (out.length !== 256 || new Set(out).size !== 256) {
+    throw new Error(`El alfabeto ${id} debe tener 256 emojis distintos (tiene ${out.length}).`);
   }
-  return result.slice(0, 256);
+  return out;
 }
-
-// 1. Estándar Expresivo: Caras (1F600-1F64F), Gestos, Comida y Símbolos Vivos
-const STANDARD_EMOJIS = buildVerified256Palette([
-  [0x1f600, 0x1f64f], // 80 Emoticonos faciales clásicos
-  [0x1f910, 0x1f92f], // 32 Caras suplementarias (🤔, 🤯, 🤠, 🥳...)
-  [0x1f970, 0x1f976], // 7 Caras adicionales (🥰, 🥵, 🥶...)
-  [0x1f440, 0x1f450], // 17 Ojos, manos y gestos
-  [0x1f525, 0x1f52e], // 10 Fuego, linterna, bola de cristal, telescopio...
-  [0x1f345, 0x1f37f], // 59 Frutas, comida y bebidas (🍅, 🍕, 🍔, 🍿...)
-  [0x1f380, 0x1f393], // 20 Celebración (🎀, 🎁, 🎃, 🎄, 🎈, 🎓...)
-  [0x1f680, 0x1f6a3], // 36 Transporte (🚀, 🚁, 🚂, ⛵...)
-]);
-
-// 2. Fauna, Flora y Clima: Animales, Plantas, Fenómenos Naturales y Cosmos
-const NATURE_EMOJIS = buildVerified256Palette([
-  [0x1f400, 0x1f43f], // 64 Animales clásicos (🐀, 🐉, 🐋, 🦊, 🐼...)
-  [0x1f980, 0x1f9ae], // 47 Animales suplementarios (🦀, 🦁, 🦂, 🦄, 🦅, 🦉, 🦋...)
-  [0x1f330, 0x1f344], // 21 Plantas, flores y setas (🌰, 🌱, 🌲, 🌵, 🌷, 🍄...)
-  [0x1f300, 0x1f320], // 33 Clima, océano, fases lunares y cosmos (🌀, 🌈, 🌊, 🌋, 🌌, 🌙, 🌟...)
-  [0x1f345, 0x1f360], // 28 Frutas y vegetales naturales
-  [0x1f361, 0x1f37f], // 31 Dulces y bebidas para completar escenas
-  [0x1f600, 0x1f630], // Relleno expresivo
-]);
-
-// 3. Artefactos, Cripto y Tecnología: Herramientas, Vehículos, Relojes y Símbolos
-const ARTIFACTS_EMOJIS = buildVerified256Palette([
-  [0x1f500, 0x1f53d], // 62 Símbolos técnicos, baterías, llaves, candados, fuego, cristales y geometría
-  [0x1f4a0, 0x1f4ff], // 96 Bombilla, explosión, dinero, gráficas, discos, ordenadores, cámaras, satélites
-  [0x1f680, 0x1f6c5], // 70 Cohetes, trenes, barcos, señales y controles
-  [0x1f3a0, 0x1f3c4], // 37 Música, cine, videojuegos, dados, diana y trofeos
-]);
 
 function createDict(
   id: DictionaryId,
   name: string,
   shortName: string,
   description: string,
-  useCase: string,
-  emojis: string[]
+  useCase: string
 ): DictionaryMeta {
+  const emojis = buildPalette(id);
   const reverseMap = new Map<string, number>();
-  emojis.forEach((em, idx) => {
-    reverseMap.set(em, idx);
-  });
+  emojis.forEach((em, idx) => reverseMap.set(em, idx));
   return { id, name, shortName, description, useCase, emojis, reverseMap };
 }
 
 export const DICTIONARIES: Record<DictionaryId, DictionaryMeta> = {
   standard: createDict(
     'standard',
-    'Base256 Expresivo (Caras y Símbolos)',
+    'Base256 Expresivo (caras, personas y fiesta)',
     'Expresivo',
-    'Alfabeto clásico de 256 emoticonos faciales, comida y transporte con máxima diferenciación visual.',
-    'Ideal para codificación general, chats cotidianos y huellas visuales fáciles de recordar.',
-    STANDARD_EMOJIS
+    'Caras, gestos, personas, corazones, celebración y música.',
+    'Uso general: mensajes de chat cotidianos y huellas fáciles de recordar.'
   ),
   nature: createDict(
     'nature',
-    'Base256 Orgánico (Fauna, Flora y Cosmos)',
+    'Base256 Orgánico (fauna, flora y comida)',
     'Naturaleza',
-    'Compuesto por 256 animales, plantas, fases lunares y elementos meteorológicos.',
-    'Óptimo para esteganografía en publicaciones sobre viajes, naturaleza, gastronomía o estilo de vida.',
-    NATURE_EMOJIS
+    'Animales, plantas, clima, cosmos, frutas y comida.',
+    'Publicaciones sobre viajes, naturaleza, gastronomía o estilo de vida.'
   ),
   artifacts: createDict(
     'artifacts',
-    'Base256 Técnico (Artefactos y Cripto)',
+    'Base256 Técnico (objetos y símbolos)',
     'Artefactos',
-    'Selección de 256 iconos de hardware, candados, llaves, satélites, discos y geometría.',
-    'Diseñado para representar hashes SHA-256, firmas digitales, claves públicas y objetos binarios.',
-    ARTIFACTS_EMOJIS
+    'Informática, oficina, candados, llaves, símbolos, transporte y relojes.',
+    'Representar hashes, claves públicas y objetos binarios.'
   ),
 };
 
+export const DICTIONARY_IDS = Object.keys(DICTIONARIES) as DictionaryId[];
+
 /**
- * Calcula un byte de suma de verificación CRC-8 (Polinomio 0x07: x^8 + x^2 + x + 1)
- * para detectar cualquier alteración o pérdida de emoticonos en tránsito.
+ * CRC-8 (polinomio 0x07: x⁸ + x² + x + 1, valor inicial 0x00, sin reflejar; la
+ * variante CRC-8/SMBUS). Detecta errores accidentales de transcripción, NO
+ * manipulaciones: quien altere el mensaje puede recalcularlo.
  */
 export function computeCRC8(bytes: Uint8Array): number {
   let crc = 0x00;
   for (let i = 0; i < bytes.length; i++) {
     crc ^= bytes[i];
     for (let bit = 0; bit < 8; bit++) {
-      if ((crc & 0x80) !== 0) {
-        crc = ((crc << 1) ^ 0x07) & 0xff;
-      } else {
-        crc = (crc << 1) & 0xff;
-      }
+      crc = crc & 0x80 ? ((crc << 1) ^ 0x07) & 0xff : (crc << 1) & 0xff;
     }
   }
   return crc;
 }
 
+/* ------------------------------------------------------------------------- */
+/* Cifrado autenticado AES-256-GCM con clave derivada de contraseña (PBKDF2)   */
+/* ------------------------------------------------------------------------- */
+
+export const PBKDF2_ITERATIONS = 600_000; // recomendación OWASP para PBKDF2-HMAC-SHA256
+export const SALT_LENGTH = 16;
+export const IV_LENGTH = 12;
+export const GCM_TAG_LENGTH = 16;
+/** Bytes que el cifrado añade al mensaje: sal + IV + etiqueta de autenticación. */
+export const ENCRYPTION_OVERHEAD = SALT_LENGTH + IV_LENGTH + GCM_TAG_LENGTH;
+
+async function deriveAesKey(passphrase: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+  const material = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(passphrase),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: PBKDF2_ITERATIONS },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
 /**
- * Cifrado simétrico ligero por flujo (Keystream derivado de frase de paso con FNV-1a + xorshift32)
- * para ofuscar los bytes antes de la codificación Base256 cuando se proporciona una clave.
- * Es completamente simétrico (XOR): aplicar la misma función cifra y descifra.
+ * Cifra con AES-256-GCM. Devuelve sal (16) ‖ IV (12) ‖ texto cifrado ‖ etiqueta (16).
+ * Sal e IV son aleatorios en cada llamada: cifrar dos veces el mismo texto con la
+ * misma contraseña produce emojis distintos.
  */
-export function applyKeystreamCipher(bytes: Uint8Array, passphrase: string): Uint8Array {
-  if (!passphrase) return bytes;
-  const passBytes = new TextEncoder().encode(passphrase);
-
-  // Semilla dual de 32 bits mediante FNV-1a
-  let h1 = 0x811c9dc5;
-  let h2 = 0x1000193;
-  for (let i = 0; i < passBytes.length; i++) {
-    h1 ^= passBytes[i];
-    h1 = Math.imul(h1, 0x01000193) >>> 0;
-    h2 ^= passBytes[i] ^ (i * 0x9e3779b9);
-    h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
-  }
-  if (h1 === 0) h1 = 0xdeadbeef;
-  if (h2 === 0) h2 = 0x41c64e6d;
-
-  const out = new Uint8Array(bytes.length);
-  let state = (h1 ^ h2) >>> 0;
-  for (let i = 0; i < bytes.length; i++) {
-    // xorshift32 + mezcla posicional
-    state ^= state << 13;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    state = state >>> 0;
-    const keyByte = ((state & 0xff) ^ ((state >>> 8) & 0xff) ^ (i & 0xff)) & 0xff;
-    out[i] = bytes[i] ^ keyByte;
-  }
+export async function encryptPayload(plain: Uint8Array, passphrase: string): Promise<Uint8Array> {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const key = await deriveAesKey(passphrase, salt);
+  const sealed = new Uint8Array(
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new Uint8Array(plain))
+  );
+  const out = new Uint8Array(SALT_LENGTH + IV_LENGTH + sealed.length);
+  out.set(salt, 0);
+  out.set(iv, SALT_LENGTH);
+  out.set(sealed, SALT_LENGTH + IV_LENGTH);
   return out;
 }
 
+export type DecryptResult =
+  | { ok: true; plain: Uint8Array }
+  | { ok: false; reason: 'too_short' | 'auth_failed' };
+
+/** Descifra el formato de encryptPayload. Si la contraseña es incorrecta o un solo bit ha cambiado, la etiqueta GCM no cuadra. */
+export async function decryptPayload(packed: Uint8Array, passphrase: string): Promise<DecryptResult> {
+  if (packed.length < ENCRYPTION_OVERHEAD) return { ok: false, reason: 'too_short' };
+  const salt = new Uint8Array(packed.slice(0, SALT_LENGTH));
+  const iv = new Uint8Array(packed.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH));
+  const sealed = new Uint8Array(packed.slice(SALT_LENGTH + IV_LENGTH));
+  try {
+    const key = await deriveAesKey(passphrase, salt);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, sealed);
+    return { ok: true, plain: new Uint8Array(plain) };
+  } catch {
+    return { ok: false, reason: 'auth_failed' };
+  }
+}
+
+/** Qué parte del paquete cifrado ocupa el byte i (para el inspector). */
+export function encryptedSegmentLabel(i: number, payloadLength: number): string {
+  if (i < SALT_LENGTH) return 'SAL';
+  if (i < SALT_LENGTH + IV_LENGTH) return 'IV';
+  if (i >= payloadLength - GCM_TAG_LENGTH) return 'TAG';
+  return 'CIFR';
+}
+
+/* ------------------------------------------------------------------------- */
+/* Codificación y decodificación                                               */
+/* ------------------------------------------------------------------------- */
+
 export interface ByteEmojiStep {
   index: number;
-  rawByte: number; // Valor original antes de cifrar
-  processedByte: number; // Valor tras cifrado (o igual a rawByte)
+  byte: number;
   hex: string;
   binary: string;
-  asciiChar: string;
+  /** Carácter ASCII del byte, o la parte del paquete (SAL, IV, CIFR, TAG, CRC8). */
+  label: string;
   emoji: string;
   codePointHex: string;
-  isChecksum?: boolean;
+  isChecksum: boolean;
 }
+
+export type Spacing = 'none' | 'space' | 'blocks4';
 
 export interface EncodeOptions {
   dictionaryId: DictionaryId;
   includeCRC8: boolean;
-  passphrase?: string;
-  spacing?: 'none' | 'space' | 'blocks4';
+  spacing?: Spacing;
+  /** Indica que los bytes ya vienen cifrados (cambia las etiquetas del inspector). */
+  encrypted?: boolean;
 }
 
 export interface EncodeResult {
   emojiString: string;
-  rawBytes: Uint8Array;
+  emojis: string[];
+  payloadBytes: Uint8Array;
   finalBytes: Uint8Array;
   steps: ByteEmojiStep[];
   crc8Byte: number | null;
   shannonEntropy: number;
-  twitterWeightedLength: number;
 }
 
-/**
- * Calcula la entropía de Shannon (0.0 a 8.0 bits por byte) de un bloque de datos.
- */
+/** Entropía de Shannon (0.0 a 8.0 bits por byte). */
 export function calculateShannonEntropy(bytes: Uint8Array): number {
   if (bytes.length === 0) return 0;
   const counts = new Uint32Array(256);
-  for (let i = 0; i < bytes.length; i++) {
-    counts[bytes[i]]++;
-  }
+  for (let i = 0; i < bytes.length; i++) counts[bytes[i]]++;
   let entropy = 0;
-  const len = bytes.length;
   for (let i = 0; i < 256; i++) {
     if (counts[i] > 0) {
-      const p = counts[i] / len;
+      const p = counts[i] / bytes.length;
       entropy -= p * Math.log2(p);
     }
   }
   return entropy;
 }
 
-/**
- * Representación legible de un byte en ASCII o etiqueta de control.
- */
+/** Representación legible de un byte en ASCII o etiqueta de control. */
 export function formatByteAscii(b: number): string {
   if (b === 0x20) return 'SPC';
   if (b === 0x0a) return '\\n';
@@ -242,82 +272,119 @@ export function formatByteAscii(b: number): string {
   return '·';
 }
 
-/**
- * Codifica cualquier Uint8Array a una secuencia de emojis Base256 con trazabilidad educativa completa.
- */
-export function encodeBytesToEmojis(rawBytes: Uint8Array, options: EncodeOptions): EncodeResult {
-  const dict = DICTIONARIES[options.dictionaryId];
-  const cipheredBytes = options.passphrase
-    ? applyKeystreamCipher(rawBytes, options.passphrase)
-    : rawBytes;
+export function toHex(bytes: Uint8Array, separator = ' '): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).toUpperCase().padStart(2, '0'))
+    .join(separator);
+}
 
-  let crc8Byte: number | null = null;
-  let finalBytes = cipheredBytes;
-
-  if (options.includeCRC8 && rawBytes.length > 0) {
-    crc8Byte = computeCRC8(cipheredBytes);
-    finalBytes = new Uint8Array(cipheredBytes.length + 1);
-    finalBytes.set(cipheredBytes, 0);
-    finalBytes[cipheredBytes.length] = crc8Byte;
-  }
-
-  const steps: ByteEmojiStep[] = [];
-  const emojiList: string[] = [];
-
-  for (let i = 0; i < finalBytes.length; i++) {
-    const isChecksum = options.includeCRC8 && i === finalBytes.length - 1;
-    const processedByte = finalBytes[i];
-    const rawByte = isChecksum ? processedByte : rawBytes[i];
-    const emoji = dict.emojis[processedByte];
-    const cp = emoji.codePointAt(0) || 0;
-
-    steps.push({
-      index: i,
-      rawByte,
-      processedByte,
-      hex: processedByte.toString(16).toUpperCase().padStart(2, '0'),
-      binary: processedByte.toString(2).padStart(8, '0'),
-      asciiChar: isChecksum ? 'CRC8' : formatByteAscii(rawByte),
-      emoji,
-      codePointHex: 'U+' + cp.toString(16).toUpperCase(),
-      isChecksum,
-    });
-    emojiList.push(emoji);
-  }
-
-  let emojiString = '';
-  if (options.spacing === 'space') {
-    emojiString = emojiList.join(' ');
-  } else if (options.spacing === 'blocks4') {
-    const chunks: string[] = [];
-    for (let i = 0; i < emojiList.length; i += 4) {
-      chunks.push(emojiList.slice(i, i + 4).join(''));
-    }
-    emojiString = chunks.join(' ');
-  } else {
-    emojiString = emojiList.join('');
-  }
-
-  // En X/Twitter cada emoji cuenta con peso 2
-  const twitterWeightedLength =
-    emojiList.length * 2 + (emojiString.length - emojiList.join('').length);
-
+function makeStep(index: number, byte: number, emoji: string, label: string, isChecksum: boolean): ByteEmojiStep {
   return {
-    emojiString,
-    rawBytes,
-    finalBytes,
-    steps,
-    crc8Byte,
-    shannonEntropy: calculateShannonEntropy(finalBytes),
-    twitterWeightedLength,
+    index,
+    byte,
+    hex: byte.toString(16).toUpperCase().padStart(2, '0'),
+    binary: byte.toString(2).padStart(8, '0'),
+    label,
+    emoji,
+    codePointHex: 'U+' + (emoji.codePointAt(0) || 0).toString(16).toUpperCase(),
+    isChecksum,
   };
 }
 
+export function joinEmojis(emojis: string[], spacing: Spacing = 'none'): string {
+  if (spacing === 'space') return emojis.join(' ');
+  if (spacing === 'blocks4') {
+    const chunks: string[] = [];
+    for (let i = 0; i < emojis.length; i += 4) chunks.push(emojis.slice(i, i + 4).join(''));
+    return chunks.join(' ');
+  }
+  return emojis.join('');
+}
+
+/** Codifica bytes (en claro o ya cifrados) a emojis Base256, con CRC-8 opcional al final. */
+export function encodeBytesToEmojis(payloadBytes: Uint8Array, options: EncodeOptions): EncodeResult {
+  const dict = DICTIONARIES[options.dictionaryId];
+  let crc8Byte: number | null = null;
+  let finalBytes = payloadBytes;
+
+  if (options.includeCRC8 && payloadBytes.length > 0) {
+    crc8Byte = computeCRC8(payloadBytes);
+    finalBytes = new Uint8Array(payloadBytes.length + 1);
+    finalBytes.set(payloadBytes, 0);
+    finalBytes[payloadBytes.length] = crc8Byte;
+  }
+
+  const steps: ByteEmojiStep[] = [];
+  const emojis: string[] = [];
+  for (let i = 0; i < finalBytes.length; i++) {
+    const isChecksum = crc8Byte !== null && i === finalBytes.length - 1;
+    const byte = finalBytes[i];
+    const emoji = dict.emojis[byte];
+    const label = isChecksum
+      ? 'CRC8'
+      : options.encrypted
+      ? encryptedSegmentLabel(i, payloadBytes.length)
+      : formatByteAscii(byte);
+    steps.push(makeStep(i, byte, emoji, label, isChecksum));
+    emojis.push(emoji);
+  }
+
+  return {
+    emojiString: joinEmojis(emojis, options.spacing),
+    emojis,
+    payloadBytes,
+    finalBytes,
+    steps,
+    crc8Byte,
+    shannonEntropy: calculateShannonEntropy(payloadBytes),
+  };
+}
+
+export interface ExtractResult {
+  emojis: string[];
+  bytes: number[];
+  /** Caracteres visibles que no pertenecen al alfabeto (texto de cobertura). */
+  ignoredCharsCount: number;
+}
+
+/**
+ * Separa los emojis del alfabeto del resto del texto. Los espacios y los
+ * selectores de variación (U+FE0E/U+FE0F, que algunas apps de chat añaden) no
+ * cuentan como texto de cobertura.
+ */
+export function extractAlphabetEmojis(input: string, dictionaryId: DictionaryId): ExtractResult {
+  const dict = DICTIONARIES[dictionaryId];
+  const emojis: string[] = [];
+  const bytes: number[] = [];
+  let ignoredCharsCount = 0;
+  for (const ch of Array.from(input)) {
+    const byteVal = dict.reverseMap.get(ch);
+    if (byteVal !== undefined) {
+      emojis.push(ch);
+      bytes.push(byteVal);
+    } else if (!/^[\s︎️‍]$/u.test(ch)) {
+      ignoredCharsCount++;
+    }
+  }
+  return { emojis, bytes, ignoredCharsCount };
+}
+
+/** Elige el alfabeto que contiene más emojis del texto (los alfabetos son disjuntos). */
+export function detectBestDictionary(input: string, preferredId: DictionaryId): DictionaryId {
+  const scores: Record<DictionaryId, number> = { standard: 0, nature: 0, artifacts: 0 };
+  for (const ch of Array.from(input)) {
+    for (const id of DICTIONARY_IDS) {
+      if (DICTIONARIES[id].reverseMap.has(ch)) scores[id]++;
+    }
+  }
+  const maxScore = Math.max(...DICTIONARY_IDS.map((id) => scores[id]));
+  if (maxScore === 0 || scores[preferredId] === maxScore) return preferredId;
+  return DICTIONARY_IDS.find((id) => scores[id] === maxScore) ?? preferredId;
+}
+
 export interface DecodeResult {
-  success: boolean;
-  decodedBytes: Uint8Array;
-  decodedText: string;
-  hexString: string;
+  /** Bytes tras quitar el CRC-8 (aún cifrados si se usó contraseña). */
+  payloadBytes: Uint8Array;
   extractedEmojis: string[];
   ignoredCharsCount: number;
   detectedDictionaryId: DictionaryId;
@@ -327,69 +394,23 @@ export interface DecodeResult {
   steps: ByteEmojiStep[];
 }
 
-/**
- * Detecta automáticamente qué diccionario contiene la mayor proporción de emojis presentes en el texto.
- */
-export function detectBestDictionary(
-  input: string,
-  preferredId: DictionaryId
-): DictionaryId {
-  const chars = Array.from(input);
-  const scores: Record<DictionaryId, number> = {
-    standard: 0,
-    nature: 0,
-    artifacts: 0,
-  };
-
-  for (const ch of chars) {
-    if (DICTIONARIES.standard.reverseMap.has(ch)) scores.standard++;
-    if (DICTIONARIES.nature.reverseMap.has(ch)) scores.nature++;
-    if (DICTIONARIES.artifacts.reverseMap.has(ch)) scores.artifacts++;
-  }
-
-  const maxScore = Math.max(scores.standard, scores.nature, scores.artifacts);
-  if (maxScore === 0 || scores[preferredId] === maxScore) {
-    return preferredId;
-  }
-  if (scores.standard === maxScore) return 'standard';
-  if (scores.nature === maxScore) return 'nature';
-  return 'artifacts';
+export interface DecodeOptions {
+  dictionaryId: DictionaryId;
+  includeCRC8: boolean;
+  autoDetectDictionary?: boolean;
+  encrypted?: boolean;
 }
 
-/**
- * Decodifica una cadena que contiene emoticonos (incluso mezclados con texto de camuflaje)
- * de vuelta a su objeto Uint8Array y cadena UTF-8.
- */
-export function decodeEmojisToBytes(
-  input: string,
-  options: EncodeOptions & { autoDetectDictionary?: boolean }
-): DecodeResult {
+/** Recupera los bytes de una cadena con emojis, aunque estén mezclados con texto de camuflaje. */
+export function decodeEmojisToBytes(input: string, options: DecodeOptions): DecodeResult {
   const activeDictId = options.autoDetectDictionary
     ? detectBestDictionary(input, options.dictionaryId)
     : options.dictionaryId;
-  const dict = DICTIONARIES[activeDictId];
+  const { emojis, bytes, ignoredCharsCount } = extractAlphabetEmojis(input, activeDictId);
 
-  const chars = Array.from(input);
-  const extractedEmojis: string[] = [];
-  const rawIndexBytes: number[] = [];
-  let ignoredCharsCount = 0;
-
-  for (const ch of chars) {
-    const byteVal = dict.reverseMap.get(ch);
-    if (byteVal !== undefined) {
-      extractedEmojis.push(ch);
-      rawIndexBytes.push(byteVal);
-    } else if (ch.trim().length > 0) {
-      ignoredCharsCount++;
-    }
-  }
-
-  if (rawIndexBytes.length === 0) {
+  if (bytes.length === 0) {
     return {
-      success: false,
-      decodedBytes: new Uint8Array(0),
-      decodedText: '',
-      hexString: '',
+      payloadBytes: new Uint8Array(0),
       extractedEmojis: [],
       ignoredCharsCount,
       detectedDictionaryId: activeDictId,
@@ -398,62 +419,40 @@ export function decodeEmojisToBytes(
     };
   }
 
-  let payloadBytes = new Uint8Array(rawIndexBytes);
+  const all = new Uint8Array(bytes);
+  let payloadBytes = all;
   let crcStatus: DecodeResult['crcStatus'] = 'not_used';
   let expectedCrcHex: string | undefined;
   let receivedCrcHex: string | undefined;
+  let hasChecksum = false;
 
   if (options.includeCRC8) {
-    if (payloadBytes.length < 2) {
+    if (all.length < 2) {
       crcStatus = 'invalid';
     } else {
-      const receivedCrc = payloadBytes[payloadBytes.length - 1];
-      const dataPart = payloadBytes.slice(0, payloadBytes.length - 1);
-      const computedCrc = computeCRC8(dataPart);
+      hasChecksum = true;
+      const receivedCrc = all[all.length - 1];
+      payloadBytes = all.slice(0, all.length - 1);
+      const computedCrc = computeCRC8(payloadBytes);
       expectedCrcHex = computedCrc.toString(16).toUpperCase().padStart(2, '0');
       receivedCrcHex = receivedCrc.toString(16).toUpperCase().padStart(2, '0');
       crcStatus = receivedCrc === computedCrc ? 'valid' : 'invalid';
-      payloadBytes = dataPart;
     }
   }
 
-  const decipheredBytes = options.passphrase
-    ? applyKeystreamCipher(payloadBytes, options.passphrase)
-    : payloadBytes;
-
-  const steps: ByteEmojiStep[] = [];
-  for (let i = 0; i < rawIndexBytes.length; i++) {
-    const isChecksum = options.includeCRC8 && i === rawIndexBytes.length - 1;
-    const processedByte = rawIndexBytes[i];
-    const rawByte = isChecksum ? processedByte : decipheredBytes[i];
-    const emoji = extractedEmojis[i];
-    const cp = emoji.codePointAt(0) || 0;
-
-    steps.push({
-      index: i,
-      rawByte,
-      processedByte,
-      hex: processedByte.toString(16).toUpperCase().padStart(2, '0'),
-      binary: processedByte.toString(2).padStart(8, '0'),
-      asciiChar: isChecksum ? 'CRC8' : formatByteAscii(rawByte),
-      emoji,
-      codePointHex: 'U+' + cp.toString(16).toUpperCase(),
-      isChecksum,
-    });
-  }
-
-  const hexString = Array.from(decipheredBytes)
-    .map((b) => b.toString(16).toUpperCase().padStart(2, '0'))
-    .join(' ');
-
-  const decodedText = new TextDecoder('utf-8', { fatal: false }).decode(decipheredBytes);
+  const steps = Array.from(all).map((byte, i) => {
+    const isChecksum = hasChecksum && i === all.length - 1;
+    const label = isChecksum
+      ? 'CRC8'
+      : options.encrypted
+      ? encryptedSegmentLabel(i, payloadBytes.length)
+      : formatByteAscii(byte);
+    return makeStep(i, byte, emojis[i], label, isChecksum);
+  });
 
   return {
-    success: crcStatus !== 'invalid',
-    decodedBytes: decipheredBytes,
-    decodedText,
-    hexString,
-    extractedEmojis,
+    payloadBytes,
+    extractedEmojis: emojis,
     ignoredCharsCount,
     detectedDictionaryId: activeDictId,
     crcStatus,
@@ -463,42 +462,64 @@ export function decodeEmojisToBytes(
   };
 }
 
-/**
- * Convierte una cadena hexadecimal ("48 6F 6C 61" o "0x486f6c61") en Uint8Array.
- */
-export function parseHexInput(hexStr: string): { bytes: Uint8Array; valid: boolean } {
+/** Convierte "48 6F 6C 61", "0x48,0x6f" o "486f6c61" en bytes. */
+export function parseHexInput(hexStr: string): {
+  bytes: Uint8Array;
+  valid: boolean;
+  issue?: 'chars' | 'odd';
+} {
   const cleaned = hexStr.replace(/0x/gi, '').replace(/[^0-9a-fA-F]/g, '');
-  if (cleaned.length === 0) {
-    return { bytes: new Uint8Array(0), valid: true };
-  }
-  const padded = cleaned.length % 2 !== 0 ? '0' + cleaned : cleaned;
-  const out = new Uint8Array(padded.length / 2);
-  for (let i = 0; i < padded.length; i += 2) {
-    out[i / 2] = parseInt(padded.slice(i, i + 2), 16);
-  }
-  return { bytes: out, valid: /^[0-9a-fA-F\s,xX:-]*$/.test(hexStr) };
+  const charsOk = /^(?:0x|[0-9a-fA-F\s,:-])*$/i.test(hexStr);
+  const usable = cleaned.length % 2 === 0 ? cleaned : cleaned.slice(0, -1);
+  const out = new Uint8Array(usable.length / 2);
+  for (let i = 0; i < usable.length; i += 2) out[i / 2] = parseInt(usable.slice(i, i + 2), 16);
+  if (!charsOk) return { bytes: out, valid: false, issue: 'chars' };
+  if (cleaned.length % 2 !== 0) return { bytes: out, valid: false, issue: 'odd' };
+  return { bytes: out, valid: true };
 }
 
 /**
- * Plantillas de camuflaje conversacional para ocultar emojis Base256 dentro de texto inocuo.
+ * Longitud ponderada de X (twitter-text v3): pesan 1 los puntos de código de
+ * U+0000–U+10FF, U+2000–U+200D, U+2010–U+201F y U+2032–U+2037; el resto
+ * (emojis, CJK…) pesa 2. Los modificadores invisibles de una secuencia emoji
+ * (U+FE0F, ZWJ) no suman. No contempla URLs (X las cuenta como 23).
  */
+export function twitterWeightedLength(text: string): number {
+  let weight = 0;
+  for (const ch of Array.from(text)) {
+    const cp = ch.codePointAt(0) || 0;
+    if (cp === 0xfe0f || cp === 0xfe0e || cp === 0x200d) continue;
+    const light =
+      cp <= 0x10ff ||
+      (cp >= 0x2000 && cp <= 0x200d) ||
+      (cp >= 0x2010 && cp <= 0x201f) ||
+      (cp >= 0x2032 && cp <= 0x2037);
+    weight += light ? 1 : 2;
+  }
+  return weight;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Plantillas de camuflaje                                                     */
+/* ------------------------------------------------------------------------- */
+
 export interface CamouflageTemplate {
   id: string;
   name: string;
   platform: string;
-  generate: (emojis: string[]) => string;
+  generate: (emojis: string[], spacing?: Spacing) => string;
 }
 
 export const CAMOUFLAGE_TEMPLATES: CamouflageTemplate[] = [
   {
     id: 'direct',
-    name: 'Secuencia Pura (Sin Camuflaje)',
-    platform: 'Estándar / Terminal',
-    generate: (emojis) => emojis.join(''),
+    name: 'Secuencia pura (sin camuflaje)',
+    platform: 'Estándar / terminal',
+    generate: (emojis, spacing) => joinEmojis(emojis, spacing),
   },
   {
     id: 'chat_casual',
-    name: 'Mensaje Casual de Chat / WhatsApp',
+    name: 'Mensaje casual de chat',
     platform: 'WhatsApp / Telegram',
     generate: (emojis) => {
       if (emojis.length === 0) return '';
@@ -513,33 +534,30 @@ export const CAMOUFLAGE_TEMPLATES: CamouflageTemplate[] = [
       const parts: string[] = [];
       let idx = 0;
       for (let i = 0; i < frases.length - 1 && idx < emojis.length; i++) {
-        const slice = emojis.slice(idx, idx + chunkSize).join('');
-        parts.push(`${frases[i]} ${slice}.`);
+        parts.push(`${frases[i]} ${emojis.slice(idx, idx + chunkSize).join('')}.`);
         idx += chunkSize;
       }
-      if (idx < emojis.length) {
-        parts.push(emojis.slice(idx).join(''));
-      }
+      if (idx < emojis.length) parts.push(emojis.slice(idx).join(''));
       parts.push(frases[frases.length - 1]);
       return parts.join(' ');
     },
   },
   {
     id: 'twitter_post',
-    name: 'Hilo / Post en X (Twitter)',
+    name: 'Publicación en X / Bluesky',
     platform: 'X / Bluesky / Mastodon',
     generate: (emojis) => {
       if (emojis.length === 0) return '';
       const mid = Math.ceil(emojis.length / 2);
-      const firstHalf = emojis.slice(0, mid).join('');
-      const secondHalf = emojis.slice(mid).join('');
-      return `Resumen visual de la semana en el estudio ${firstHalf} ✨\n\nPróximos objetivos para el proyecto ${secondHalf} #dev #tech`;
+      return `Resumen visual de la semana en el estudio ${emojis.slice(0, mid).join('')} ✨\n\nPróximos objetivos para el proyecto ${emojis
+        .slice(mid)
+        .join('')} #dev #tech`;
     },
   },
   {
     id: 'fingerprint_grid',
-    name: 'Matriz Criptográfica (Bloques 4×4)',
-    platform: 'Verificación de Claves / Hashes',
+    name: 'Matriz de verificación (bloques de 4)',
+    platform: 'Verificación de claves / hashes',
     generate: (emojis) => {
       if (emojis.length === 0) return '';
       const rows: string[] = [];
@@ -553,36 +571,29 @@ export const CAMOUFLAGE_TEMPLATES: CamouflageTemplate[] = [
   },
 ];
 
-/**
- * Calcula un hash criptográfico real usando Web Crypto API (SHA-1, SHA-256, SHA-384, SHA-512).
- */
+/* ------------------------------------------------------------------------- */
+/* Hashes                                                                      */
+/* ------------------------------------------------------------------------- */
+
 export type HashAlgorithm = 'SHA-256' | 'SHA-512' | 'SHA-384' | 'SHA-1';
 
-export async function computeCryptoHash(
-  inputBytes: Uint8Array,
-  algorithm: HashAlgorithm
-): Promise<Uint8Array> {
-  const buffer = await crypto.subtle.digest(algorithm, inputBytes);
+/** Resumen criptográfico real con la Web Crypto API. */
+export async function computeCryptoHash(inputBytes: Uint8Array, algorithm: HashAlgorithm): Promise<Uint8Array> {
+  const buffer = await crypto.subtle.digest(algorithm, new Uint8Array(inputBytes));
   return new Uint8Array(buffer);
 }
 
-/**
- * Calcula la distancia de Hamming en bits entre dos arrays de bytes de igual longitud
- * (ideal para demostrar el Efecto Avalancha en hashes).
- */
-export function computeBitHammingDistance(a: Uint8Array, b: Uint8Array): {
-  differingBits: number;
-  totalBits: number;
-  percentage: number;
-  differingBytes: number;
-} {
+/** Distancia de Hamming en bits entre dos bloques de igual longitud (efecto avalancha). */
+export function computeBitHammingDistance(
+  a: Uint8Array,
+  b: Uint8Array
+): { differingBits: number; totalBits: number; percentage: number; differingBytes: number } {
   const len = Math.min(a.length, b.length);
   let differingBits = 0;
   let differingBytes = 0;
   for (let i = 0; i < len; i++) {
-    const xor = a[i] ^ b[i];
-    if (xor !== 0) differingBytes++;
-    let v = xor;
+    let v = a[i] ^ b[i];
+    if (v !== 0) differingBytes++;
     while (v > 0) {
       differingBits += v & 1;
       v >>= 1;

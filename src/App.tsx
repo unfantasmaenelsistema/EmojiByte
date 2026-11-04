@@ -1,16 +1,24 @@
 /**
  * @license
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: MIT
  */
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DICTIONARIES,
+  DICTIONARY_IDS,
   DictionaryId,
   CAMOUFLAGE_TEMPLATES,
-  encodeBytesToEmojis,
+  ENCRYPTION_OVERHEAD,
+  PBKDF2_ITERATIONS,
+  Spacing,
   decodeEmojisToBytes,
+  decryptPayload,
+  encodeBytesToEmojis,
+  encryptPayload,
   parseHexInput,
+  toHex,
+  twitterWeightedLength,
 } from './lib/emojiCodec';
 import { HashComparatorLab } from './components/HashComparatorLab';
 import { AlphabetMatrixExplorer } from './components/AlphabetMatrixExplorer';
@@ -24,7 +32,6 @@ import {
   Lock,
   ShieldCheck,
   ShieldAlert,
-  Sparkles,
   Sun,
   Moon,
   ExternalLink,
@@ -32,10 +39,15 @@ import {
   FileCode,
   MessageSquare,
   Shuffle,
+  Loader2,
 } from 'lucide-react';
 
 type CodecDirection = 'encode' | 'decode';
 type InputFormat = 'text' | 'hex' | 'binary';
+
+/** Tamaño máximo de archivo que se codifica (cada byte es un emoji de 4 bytes UTF-8). */
+const MAX_FILE_BYTES = 2048;
+const THEME_KEY = 'eb_theme';
 
 interface QuickSample {
   id: string;
@@ -49,7 +61,7 @@ interface QuickSample {
 const QUICK_SAMPLES: QuickSample[] = [
   {
     id: 'ghost',
-    label: 'Mensaje Oculto',
+    label: 'Mensaje oculto',
     format: 'text',
     value: 'Un Fantasma en el Sistema: Operación Silenciosa a las 23:00h',
     dictionary: 'standard',
@@ -57,7 +69,7 @@ const QUICK_SAMPLES: QuickSample[] = [
   },
   {
     id: 'social_camo',
-    label: 'Camuflaje en X / Chat',
+    label: 'Camuflaje en chat',
     format: 'text',
     value: 'Clave de acceso WiFi invitados: Fantasma#2026!',
     dictionary: 'nature',
@@ -65,7 +77,7 @@ const QUICK_SAMPLES: QuickSample[] = [
   },
   {
     id: 'hex_key',
-    label: 'Objeto Byte / Clave (Hex)',
+    label: 'Objeto byte (hex)',
     format: 'hex',
     value: 'DE AD BE EF CA FE BA BE 46 41 4E 54 41 53 4D 41',
     dictionary: 'artifacts',
@@ -81,15 +93,38 @@ const QUICK_SAMPLES: QuickSample[] = [
   },
 ];
 
+function readStoredTheme(): boolean {
+  try {
+    return localStorage.getItem(THEME_KEY) !== 'light';
+  } catch {
+    return true;
+  }
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type DecryptState =
+  | { status: 'idle' }
+  | { status: 'pending' }
+  | { status: 'ok'; plain: Uint8Array; source: Uint8Array; pass: string }
+  | { status: 'auth_failed' | 'too_short'; source: Uint8Array; pass: string };
+
 export default function App() {
-  const [isDark, setIsDark] = useState<boolean>(true);
+  const [isDark, setIsDark] = useState<boolean>(readStoredTheme);
   const [direction, setDirection] = useState<CodecDirection>('encode');
   const [inputFormat, setInputFormat] = useState<InputFormat>('text');
   const [dictionaryId, setDictionaryId] = useState<DictionaryId>('standard');
   const [includeCRC8, setIncludeCRC8] = useState<boolean>(true);
   const [passphrase, setPassphrase] = useState<string>('');
   const [camouflageId, setCamouflageId] = useState<string>('direct');
-  const [spacing, setSpacing] = useState<'none' | 'space' | 'blocks4'>('none');
+  const [spacing, setSpacing] = useState<Spacing>('none');
 
   // Entradas para codificar
   const [textInput, setTextInput] = useState<string>(QUICK_SAMPLES[0].value);
@@ -98,6 +133,7 @@ export default function App() {
     new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x49, 0x48, 0x44, 0x52])
   );
   const [binaryFileName, setBinaryFileName] = useState<string>('cabecera_png.bin');
+  const [binaryFileTotal, setBinaryFileTotal] = useState<number>(12);
 
   // Entrada para decodificar
   const [emojiInput, setEmojiInput] = useState<string>('');
@@ -109,73 +145,113 @@ export default function App() {
   const [logoLoadError, setLogoLoadError] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const toggleTheme = () => {
-    const next = !isDark;
-    setIsDark(next);
-    if (next) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+    try {
+      localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+    } catch {
+      /* almacenamiento no disponible: el tema solo dura esta visita */
     }
-  };
+  }, [isDark]);
 
-  // Calcular bytes de origen activos en modo Codificar
+  // Una contraseña hecha solo de espacios cuenta como «sin contraseña».
+  const activePass = passphrase.trim() ? passphrase : '';
+  const encrypted = activePass !== '';
+
+  // Bytes de origen en modo Codificar
   const sourceBytesInfo = useMemo(() => {
-    if (inputFormat === 'text') {
-      return {
-        bytes: new TextEncoder().encode(textInput),
-        valid: true,
-      };
-    }
-    if (inputFormat === 'hex') {
-      return parseHexInput(hexInput);
-    }
-    return {
-      bytes: binaryFileBytes,
-      valid: true,
-    };
+    if (inputFormat === 'text') return { bytes: new TextEncoder().encode(textInput), valid: true as const };
+    if (inputFormat === 'hex') return parseHexInput(hexInput);
+    return { bytes: binaryFileBytes, valid: true as const };
   }, [inputFormat, textInput, hexInput, binaryFileBytes]);
 
-  // Resultado de codificación
-  const encodeResult = useMemo(() => {
-    return encodeBytesToEmojis(sourceBytesInfo.bytes, {
-      dictionaryId,
-      includeCRC8,
-      passphrase: passphrase.trim() || undefined,
-      spacing,
-    });
-  }, [sourceBytesInfo.bytes, dictionaryId, includeCRC8, passphrase, spacing]);
+  // Cifrado AES-GCM (asíncrono, con una pequeña espera para no derivar la clave en cada pulsación)
+  const [cipher, setCipher] = useState<{ source: Uint8Array; pass: string; bytes: Uint8Array } | null>(null);
+  useEffect(() => {
+    if (!encrypted || sourceBytesInfo.bytes.length === 0) return;
+    let cancelled = false;
+    const source = sourceBytesInfo.bytes;
+    const timer = window.setTimeout(async () => {
+      const bytes = await encryptPayload(source, activePass);
+      if (!cancelled) setCipher({ source, pass: activePass, bytes });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [encrypted, activePass, sourceBytesInfo.bytes]);
 
-  // Salida formateada según plantilla de camuflaje
+  const cipherReady =
+    cipher !== null && cipher.source === sourceBytesInfo.bytes && cipher.pass === activePass;
+  const encryptPending = encrypted && sourceBytesInfo.bytes.length > 0 && !cipherReady;
+  const payloadToEncode = !encrypted
+    ? sourceBytesInfo.bytes
+    : cipherReady
+    ? cipher!.bytes
+    : new Uint8Array(0);
+
+  const encodeResult = useMemo(
+    () => encodeBytesToEmojis(payloadToEncode, { dictionaryId, includeCRC8, spacing, encrypted }),
+    [payloadToEncode, dictionaryId, includeCRC8, spacing, encrypted]
+  );
+
+  // Salida con la plantilla de camuflaje elegida
   const camouflagedOutput = useMemo(() => {
-    const emojis = encodeResult.steps.map((s) => s.emoji);
-    if (camouflageId === 'direct') {
-      return encodeResult.emojiString;
-    }
-    const tpl = CAMOUFLAGE_TEMPLATES.find((t) => t.id === camouflageId);
-    return tpl ? tpl.generate(emojis) : encodeResult.emojiString;
-  }, [encodeResult, camouflageId]);
+    const tpl = CAMOUFLAGE_TEMPLATES.find((t) => t.id === camouflageId) ?? CAMOUFLAGE_TEMPLATES[0];
+    return tpl.generate(encodeResult.emojis, spacing);
+  }, [encodeResult, camouflageId, spacing]);
 
-  // Resultado de decodificación
-  const decodeResult = useMemo(() => {
-    return decodeEmojisToBytes(emojiInput, {
-      dictionaryId,
-      includeCRC8,
-      passphrase: passphrase.trim() || undefined,
-      autoDetectDictionary: autoDetectDict,
-    });
-  }, [emojiInput, dictionaryId, includeCRC8, passphrase, autoDetectDict]);
+  // Decodificación (síncrona) y descifrado (asíncrono)
+  const decodeResult = useMemo(
+    () =>
+      decodeEmojisToBytes(emojiInput, {
+        dictionaryId,
+        includeCRC8,
+        autoDetectDictionary: autoDetectDict,
+        encrypted,
+      }),
+    [emojiInput, dictionaryId, includeCRC8, autoDetectDict, encrypted]
+  );
 
-  // Longitud ponderada para X/Twitter (emojis pesan 2, caracteres normales pesan 1)
-  const twitterCharWeight = useMemo(() => {
-    const chars = Array.from(camouflagedOutput);
-    let weight = 0;
-    for (const ch of chars) {
-      const cp = ch.codePointAt(0) || 0;
-      weight += cp > 0x1f000 ? 2 : 1;
-    }
-    return weight;
-  }, [camouflagedOutput]);
+  const [decrypt, setDecrypt] = useState<DecryptState>({ status: 'idle' });
+  useEffect(() => {
+    const packed = decodeResult.payloadBytes;
+    if (!encrypted || packed.length === 0) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const r = await decryptPayload(packed, activePass);
+      if (cancelled) return;
+      setDecrypt(
+        r.ok
+          ? { status: 'ok', plain: r.plain, source: packed, pass: activePass }
+          : { status: r.reason, source: packed, pass: activePass }
+      );
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [encrypted, activePass, decodeResult.payloadBytes]);
+
+  const decryptCurrent =
+    'source' in decrypt && decrypt.source === decodeResult.payloadBytes && decrypt.pass === activePass;
+  const decryptStatus: 'none' | 'pending' | 'ok' | 'auth_failed' | 'too_short' = !encrypted ||
+    decodeResult.payloadBytes.length === 0
+    ? 'none'
+    : decryptCurrent
+    ? (decrypt.status as 'ok' | 'auth_failed' | 'too_short')
+    : 'pending';
+
+  const decodedBytes =
+    decryptStatus === 'none'
+      ? decodeResult.payloadBytes
+      : decryptStatus === 'ok' && decrypt.status === 'ok'
+      ? decrypt.plain
+      : new Uint8Array(0);
+  const decodedText = useMemo(() => new TextDecoder('utf-8', { fatal: false }).decode(decodedBytes), [decodedBytes]);
+  const decodedHex = useMemo(() => toHex(decodedBytes), [decodedBytes]);
+
+  const twitterCharWeight = useMemo(() => twitterWeightedLength(camouflagedOutput), [camouflagedOutput]);
 
   // Invertir dirección enviando el resultado actual a la entrada opuesta
   const handleSwapDirection = () => {
@@ -183,35 +259,30 @@ export default function App() {
       setEmojiInput(camouflagedOutput);
       setDirection('decode');
     } else {
-      if (decodeResult.decodedBytes.length > 0) {
-        setTextInput(decodeResult.decodedText);
-        setHexInput(decodeResult.hexString);
+      if (decodedBytes.length > 0) {
+        setTextInput(decodedText);
+        setHexInput(decodedHex);
       }
       setDirection('encode');
     }
   };
 
-  const handleCopyPrimaryOutput = () => {
-    const target =
-      direction === 'encode'
-        ? camouflagedOutput
-        : inputFormat === 'hex'
-        ? decodeResult.hexString
-        : decodeResult.decodedText;
-    navigator.clipboard.writeText(target);
+  const handleCopyPrimaryOutput = async () => {
+    const ok = await copyText(direction === 'encode' ? camouflagedOutput : decodedText);
+    if (!ok) return;
     setCopiedOutput(true);
     setTimeout(() => setCopiedOutput(false), 1800);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       if (reader.result instanceof ArrayBuffer) {
-        // Limitamos a los primeros 512 bytes para fluidez visual en el navegador
-        const slice = new Uint8Array(reader.result.slice(0, 512));
-        setBinaryFileBytes(slice);
+        setBinaryFileBytes(new Uint8Array(reader.result.slice(0, MAX_FILE_BYTES)));
+        setBinaryFileTotal(reader.result.byteLength);
         setBinaryFileName(file.name);
         setInputFormat('binary');
         setDirection('encode');
@@ -225,21 +296,17 @@ export default function App() {
     crypto.getRandomValues(rand);
     if (inputFormat === 'binary') {
       setBinaryFileBytes(rand);
-      setBinaryFileName('random_16bytes.bin');
+      setBinaryFileTotal(rand.length);
+      setBinaryFileName('aleatorio_16bytes.bin');
     } else {
-      const hex = Array.from(rand)
-        .map((b) => b.toString(16).toUpperCase().padStart(2, '0'))
-        .join(' ');
-      setHexInput(hex);
+      setHexInput(toHex(rand));
       setInputFormat('hex');
     }
   };
 
   const handleDownloadDecodedBytes = () => {
-    if (decodeResult.decodedBytes.length === 0) return;
-    const blob = new Blob([decodeResult.decodedBytes], {
-      type: 'application/octet-stream',
-    });
+    if (decodedBytes.length === 0) return;
+    const blob = new Blob([new Uint8Array(decodedBytes)], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -256,8 +323,7 @@ export default function App() {
     for (let i = 0; i < chars.length; i++) {
       const currentVal = dict.reverseMap.get(chars[i]);
       if (currentVal !== undefined) {
-        const mutatedVal = (currentVal + 1) % 256;
-        chars[i] = dict.emojis[mutatedVal];
+        chars[i] = dict.emojis[(currentVal + 1) % 256];
         setEmojiInput(chars.join(''));
         return;
       }
@@ -265,21 +331,29 @@ export default function App() {
   };
 
   const handleInsertFromMatrix = (byteVal: number, emoji: string) => {
-    if (direction === 'encode') {
-      if (inputFormat === 'hex') {
-        const hex = byteVal.toString(16).toUpperCase().padStart(2, '0');
-        setHexInput((prev) => (prev.trim() ? `${prev.trim()} ${hex}` : hex));
-      } else if (inputFormat === 'text') {
-        const ch = byteVal >= 32 && byteVal <= 126 ? String.fromCharCode(byteVal) : `[0x${byteVal.toString(16).toUpperCase()}]`;
-        setTextInput((prev) => prev + ch);
-      } else {
-        const next = new Uint8Array(binaryFileBytes.length + 1);
-        next.set(binaryFileBytes, 0);
-        next[binaryFileBytes.length] = byteVal;
-        setBinaryFileBytes(next);
-      }
-    } else {
+    const hex = byteVal.toString(16).toUpperCase().padStart(2, '0');
+    if (direction === 'decode') {
       setEmojiInput((prev) => prev + emoji);
+      return;
+    }
+    if (inputFormat === 'text') {
+      if (byteVal >= 32 && byteVal <= 126) {
+        setTextInput((prev) => prev + String.fromCharCode(byteVal));
+      } else {
+        // Un byte de control o ≥ 0x80 no se puede escribir como texto UTF-8:
+        // se pasa a modo hexadecimal conservando lo escrito.
+        const current = toHex(new TextEncoder().encode(textInput));
+        setHexInput(current ? `${current} ${hex}` : hex);
+        setInputFormat('hex');
+      }
+    } else if (inputFormat === 'hex') {
+      setHexInput((prev) => (prev.trim() ? `${prev.trim()} ${hex}` : hex));
+    } else {
+      const next = new Uint8Array(binaryFileBytes.length + 1);
+      next.set(binaryFileBytes, 0);
+      next[binaryFileBytes.length] = byteVal;
+      setBinaryFileBytes(next);
+      setBinaryFileTotal(next.length);
     }
   };
 
@@ -289,7 +363,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
       {/* Top Bar Contract: 3 Zonas con gap-8 */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-8 px-6 py-3.5">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 sm:gap-8 px-4 sm:px-6 py-3.5">
           {/* Zona 1: Brand Title */}
           <a
             href="#codificador"
@@ -322,7 +396,7 @@ export default function App() {
               href="#laboratorio"
               className="hover:text-slate-900 dark:hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
             >
-              Documentación
+              Fundamentos
             </a>
           </nav>
 
@@ -332,9 +406,10 @@ export default function App() {
               href="https://www.unfantasmaenelsistema.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors whitespace-nowrap shrink-0 shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors whitespace-nowrap shrink-0 shadow-xs"
             >
-              <span>Un Fantasma en el Sistema</span>
+              <span className="hidden sm:inline">Un Fantasma en el Sistema</span>
+              <span className="sm:hidden">Web</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
@@ -342,13 +417,13 @@ export default function App() {
       </header>
 
       {/* Contenido Principal */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-16">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-16">
         {/* Hero y Cabecera con Logo Oficial del Autor */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center border-b border-slate-200 dark:border-slate-800 pb-10">
           <div className="lg:col-span-8 space-y-4">
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
               <span className="font-semibold text-rose-600 dark:text-rose-400">
-                Esteganografía Lingüística y Criptografía Visual
+                Codificación Base256 y criptografía visual
               </span>
               <span aria-hidden="true">·</span>
               <span>Codificación Biyectiva 8-Bit (1 Byte = 1 Emoji)</span>
@@ -361,7 +436,7 @@ export default function App() {
             </h1>
 
             <p className="text-base text-slate-600 dark:text-slate-400 max-w-2xl leading-relaxed">
-              Oculta cargas útiles de datos dentro de conversaciones de texto inocuas en chats o redes sociales, verifica la integridad mediante sumas de control <strong>CRC-8</strong> y compara resúmenes criptográficos <strong>SHA-256</strong> de forma gráfica e inmediata.
+              Cada byte se convierte en un emoji y vuelta, sin pérdidas. Camufla los emojis dentro de un mensaje de chat, protégelos con <strong>AES-256-GCM</strong> si quieres confidencialidad de verdad, detecta errores de copia con <strong>CRC-8</strong> y compara resúmenes <strong>SHA-256</strong> de forma gráfica. Todo ocurre en tu navegador: no se envía nada a ningún servidor.
             </p>
 
             {/* Barra de herramientas rápida: Selector de Ejemplos + Tema Claro/Oscuro */}
@@ -389,7 +464,7 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={toggleTheme}
+                onClick={() => setIsDark((d) => !d)}
                 className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-200/70 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
                 title="Cambiar entre tema claro y oscuro"
               >
@@ -418,18 +493,13 @@ export default function App() {
             >
               <div className="flex items-center gap-4">
                 <div className="w-20 h-20 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-2 shrink-0 overflow-hidden">
-                  {!logoLoadError ? (
+                  {!logoLoadError && (
                     <img
                       src="assets/aistudio/icono_81a3db5b.png"
                       alt="Logo de Un Fantasma en el Sistema"
-                      referrerPolicy="no-referrer"
                       onError={() => setLogoLoadError(true)}
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform"
                     />
-                  ) : (
-                    <span className="text-3xl" role="img" aria-label="Fantasma">
-                      👻
-                    </span>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -460,12 +530,12 @@ export default function App() {
           {/* Barra Superior de Control del Codificador */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             {/* Selector de Operación: Codificar vs Decodificar */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-1 sm:flex-none items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg">
                 <button
                   type="button"
                   onClick={() => setDirection('encode')}
-                  className={`px-4 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs font-semibold rounded-md transition-colors sm:whitespace-nowrap ${
                     direction === 'encode'
                       ? 'bg-rose-600 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -481,7 +551,7 @@ export default function App() {
                     }
                     setDirection('decode');
                   }}
-                  className={`px-4 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs font-semibold rounded-md transition-colors sm:whitespace-nowrap ${
                     direction === 'decode'
                       ? 'bg-rose-600 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -505,7 +575,7 @@ export default function App() {
             {/* Parámetros del Motor: Diccionario, CRC-8 y Clave de Paso */}
             <div className="flex flex-wrap items-center gap-3">
               {/* Selector de Diccionario Base256 */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0 max-w-full">
                 <label
                   htmlFor="dict-select"
                   className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap"
@@ -516,9 +586,9 @@ export default function App() {
                   id="dict-select"
                   value={dictionaryId}
                   onChange={(e) => setDictionaryId(e.target.value as DictionaryId)}
-                  className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                  className="min-w-0 max-w-full px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
                 >
-                  {(Object.keys(DICTIONARIES) as DictionaryId[]).map((id) => (
+                  {DICTIONARY_IDS.map((id) => (
                     <option key={id} value={id}>
                       {DICTIONARIES[id].name}
                     </option>
@@ -537,15 +607,26 @@ export default function App() {
                 <span>Checksum CRC-8 (1 byte)</span>
               </label>
 
-              {/* Clave de Paso Opcional (XOR Stream) */}
+              {/* Contraseña opcional: AES-256-GCM con clave derivada por PBKDF2 */}
               <div className="relative flex items-center">
-                <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+                {encryptPending || decryptStatus === 'pending' ? (
+                  <Loader2 className="w-3.5 h-3.5 text-rose-500 absolute left-2.5 pointer-events-none animate-spin" />
+                ) : (
+                  <Lock
+                    className={`w-3.5 h-3.5 absolute left-2.5 pointer-events-none ${
+                      encrypted ? 'text-emerald-500' : 'text-slate-400'
+                    }`}
+                  />
+                )}
                 <input
                   type="password"
+                  aria-label="Contraseña opcional para cifrar con AES-256-GCM"
+                  title={`Opcional. Cifra con AES-256-GCM; la clave se deriva con PBKDF2-SHA256 (${PBKDF2_ITERATIONS.toLocaleString('es-ES')} iteraciones). Añade ${ENCRYPTION_OVERHEAD} bytes (sal, IV y etiqueta).`}
                   value={passphrase}
                   onChange={(e) => setPassphrase(e.target.value)}
-                  placeholder="Clave XOR opcional..."
-                  className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 w-44 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                  placeholder="Contraseña AES (opcional)"
+                  autoComplete="new-password"
+                  className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 w-52 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
                 />
               </div>
             </div>
@@ -620,9 +701,14 @@ export default function App() {
                           placeholder="Introduce bytes en formato hexadecimal, p. ej.: 48 6F 6C 61 o 0xdeadbeef..."
                           className="w-full p-3.5 text-sm font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/40 leading-relaxed"
                         />
-                        {!sourceBytesInfo.valid && (
+                        {'issue' in sourceBytesInfo && sourceBytesInfo.issue === 'chars' && (
                           <p className="text-xs text-amber-600 dark:text-amber-400">
-                            ▲ Nota: Se ignoraron caracteres no hexadecimales en la entrada.
+                            ▲ Hay caracteres que no son hexadecimales; se han ignorado.
+                          </p>
+                        )}
+                        {'issue' in sourceBytesInfo && sourceBytesInfo.issue === 'odd' && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            ▲ Número impar de dígitos: un byte son 2 dígitos hex, así que el último dígito suelto no se codifica.
                           </p>
                         )}
                       </div>
@@ -640,6 +726,12 @@ export default function App() {
                               <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
                                 {binaryFileBytes.length} bytes cargados en el buffer
                               </div>
+                              {binaryFileTotal > binaryFileBytes.length && (
+                                <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                                  ▲ El archivo tiene {binaryFileTotal.toLocaleString('es-ES')} bytes: solo se codifican los primeros{' '}
+                                  {MAX_FILE_BYTES.toLocaleString('es-ES')}. Lo que decodifiques será un fragmento, no el archivo completo.
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -694,7 +786,10 @@ export default function App() {
                         onClick={() => {
                           if (inputFormat === 'text') setTextInput('');
                           if (inputFormat === 'hex') setHexInput('');
-                          if (inputFormat === 'binary') setBinaryFileBytes(new Uint8Array(0));
+                          if (inputFormat === 'binary') {
+                            setBinaryFileBytes(new Uint8Array(0));
+                            setBinaryFileTotal(0);
+                          }
                         }}
                         className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                       >
@@ -828,7 +923,12 @@ export default function App() {
 
                     {/* Área de Salida de Emojis */}
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg min-h-[148px] max-h-[220px] overflow-y-auto">
-                      {encodeResult.steps.length === 0 ? (
+                      {encryptPending ? (
+                        <div className="h-28 flex items-center justify-center gap-2 text-xs text-slate-400">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Derivando la clave y cifrando con AES-256-GCM…
+                        </div>
+                      ) : encodeResult.steps.length === 0 ? (
                         <div className="h-28 flex items-center justify-center text-xs text-slate-400">
                           Escribe texto o introduce bytes a la izquierda para generar emoticonos...
                         </div>
@@ -843,7 +943,7 @@ export default function App() {
                               title={
                                 step.isChecksum
                                   ? `Byte Checksum CRC-8: 0x${step.hex} (${step.emoji})`
-                                  : `Byte #${step.index}: '${step.asciiChar}' → 0x${step.hex} (${step.processedByte}) → ${step.emoji}`
+                                  : `Byte #${step.index}: '${step.label}' → 0x${step.hex} (${step.byte}) → ${step.emoji}`
                               }
                               className={`px-1 py-0.5 text-xl rounded transition-transform ${
                                 highlightedStepIndex === step.index
@@ -869,6 +969,14 @@ export default function App() {
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                     <div className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400">
                       <span>{encodeResult.steps.length} emoticonos</span>
+                      {encrypted && cipherReady && (
+                        <>
+                          <span className="mx-1.5">·</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            AES-GCM (+{ENCRYPTION_OVERHEAD} B)
+                          </span>
+                        </>
+                      )}
                       {includeCRC8 && encodeResult.crc8Byte !== null && (
                         <>
                           <span className="mx-1.5">·</span>
@@ -885,7 +993,7 @@ export default function App() {
                             : ''
                         }
                       >
-                        Peso X/Twitter: {twitterCharWeight}/280
+                        Peso en X: {twitterCharWeight}/280
                       </span>
                     </div>
 
@@ -942,12 +1050,37 @@ export default function App() {
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400">
                           <ShieldAlert className="w-4 h-4" />
                           <span>
-                            Error CRC-8 (Esperado 0x{decodeResult.expectedCrcHex}, recibido 0x
-                            {decodeResult.receivedCrcHex})
+                            {decodeResult.expectedCrcHex
+                              ? `Error CRC-8 (calculado 0x${decodeResult.expectedCrcHex}, recibido 0x${decodeResult.receivedCrcHex})`
+                              : 'Error CRC-8 (faltan emojis: no hay datos + checksum)'}
                           </span>
                         </span>
                       )}
                     </div>
+
+                    {/* Estado del descifrado AES-GCM */}
+                    {decryptStatus === 'pending' && (
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Derivando la clave y comprobando la etiqueta GCM…
+                      </div>
+                    )}
+                    {decryptStatus === 'ok' && (
+                      <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                        <ShieldCheck className="w-4 h-4" />
+                        Descifrado AES-256-GCM correcto: la contraseña es la buena y el mensaje no se ha modificado.
+                      </div>
+                    )}
+                    {(decryptStatus === 'auth_failed' || decryptStatus === 'too_short') && (
+                      <div className="flex items-start gap-2 p-2.5 rounded-lg bg-rose-500/10 text-xs font-medium text-rose-700 dark:text-rose-300">
+                        <ShieldAlert className="w-4 h-4 shrink-0" />
+                        <span>
+                          {decryptStatus === 'too_short'
+                            ? `No se puede descifrar: un mensaje cifrado tiene al menos ${ENCRYPTION_OVERHEAD} bytes (sal, IV y etiqueta). ¿Se cifró de verdad o falta parte del mensaje?`
+                            : 'No se puede descifrar: la contraseña no es la correcta, el mensaje se ha alterado o no estaba cifrado. AES-GCM no entrega datos sin autenticar.'}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Cadena de Texto Decodificada */}
                     <div className="space-y-1.5">
@@ -955,7 +1088,7 @@ export default function App() {
                         Cadena UTF-8 / ASCII Decodificada:
                       </div>
                       <div className="p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg min-h-[84px] text-sm font-mono break-words whitespace-pre-wrap text-slate-900 dark:text-slate-100">
-                        {decodeResult.decodedText || (
+                        {decodedText || (
                           <span className="text-slate-400 font-sans text-xs">
                             Sin datos decodificados...
                           </span>
@@ -966,10 +1099,10 @@ export default function App() {
                     {/* Volcado Hexadecimal (Uint8Array) */}
                     <div className="space-y-1.5">
                       <div className="text-xs text-slate-500 dark:text-slate-400">
-                        Volcado Hexadecimal del Objeto Byte ({decodeResult.decodedBytes.length} bytes):
+                        Volcado Hexadecimal del Objeto Byte ({decodedBytes.length} bytes):
                       </div>
                       <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg font-mono text-xs text-slate-600 dark:text-slate-300 max-h-24 overflow-y-auto break-all">
-                        {decodeResult.hexString || '—'}
+                        {decodedHex || '—'}
                       </div>
                     </div>
                   </div>
@@ -978,17 +1111,17 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleDownloadDecodedBytes}
-                      disabled={decodeResult.decodedBytes.length === 0}
+                      disabled={decodedBytes.length === 0}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 rounded-lg transition-colors whitespace-nowrap shrink-0"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Descargar .bin ({decodeResult.decodedBytes.length} B)</span>
+                      <span>Descargar .bin ({decodedBytes.length} B)</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleCopyPrimaryOutput}
-                      disabled={decodeResult.decodedBytes.length === 0}
+                      disabled={decodedBytes.length === 0}
                       className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 disabled:opacity-40 rounded-lg transition-colors whitespace-nowrap shrink-0"
                     >
                       {copiedOutput ? (
@@ -1063,13 +1196,13 @@ export default function App() {
                                 : 'text-rose-600 dark:text-rose-400'
                             }`}
                           >
-                            {step.asciiChar}
+                            {step.label}
                           </div>
                         </div>
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums tracking-tight border-t border-slate-200/60 dark:border-slate-800 pt-1 flex justify-between">
                         <span>{step.binary}</span>
-                        <span>{step.processedByte}</span>
+                        <span>{step.byte}</span>
                       </div>
                     </div>
                   );
@@ -1101,7 +1234,6 @@ export default function App() {
               <img
                 src="assets/aistudio/icono_81a3db5b.png"
                 alt="Un Fantasma en el Sistema"
-                referrerPolicy="no-referrer"
                 onError={() => setLogoLoadError(true)}
                 className="w-9 h-9 object-contain"
               />

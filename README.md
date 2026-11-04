@@ -1,180 +1,139 @@
-<div align="center">
-  <a href="https://www.unfantasmaenelsistema.com/">
-    <img src="./public/assets/aistudio/icono_81a3db5b.png" alt="Logo Un Fantasma en el Sistema" width="120" height="120" />
-  </a>
+<p align="center">
+  <a href="https://www.unfantasmaenelsistema.com"><img src="public/assets/aistudio/icono_81a3db5b.png" width="110" alt="Un fantasma en el sistema"></a>
+</p>
 
-  # EmojiByte Base256
-  ### Codificador Biyectivo de Cadenas ASCII, UTF-8 y Objetos Byte en Emoticonos + Visualizador Criptográfico de Hashes
+<h1 align="center">EmojiByte Base256</h1>
 
-  <p>
-    Una herramienta educativa y profesional de <strong>esteganografía lingüística</strong> y <strong>verificación visual de integridad</strong> desarrollada para <a href="https://www.unfantasmaenelsistema.com/"><strong>Un Fantasma en el Sistema</strong></a>.
-  </p>
+<p align="center">
+  <b>Codifica texto, hexadecimal y archivos en emojis (1 byte = 1 emoji) y compara hashes de un vistazo</b><br>
+  Tres alfabetos de 256 emojis · Camuflaje en mensajes de chat · CRC-8 · Cifrado AES-256-GCM opcional · Comparador visual de SHA-256
+</p>
 
-  <p>
-    <a href="https://www.unfantasmaenelsistema.com/"><img src="https://img.shields.io/badge/Proyecto-Un_Fantasma_en_el_Sistema-e11d48?style=flat-square" alt="Un Fantasma en el Sistema" /></a>
-    <img src="https://img.shields.io/badge/Codificaci%C3%B3n-Base256_(1_Byte_%3D_1_Emoji)-0284c7?style=flat-square" alt="Base256" />
-    <img src="https://img.shields.io/badge/Integridad-CRC--8_%2B_SHA--256-10b981?style=flat-square" alt="CRC-8 & SHA-256" />
-    <img src="https://img.shields.io/badge/Arquitectura-100%25_Client--Side_(GitHub_Pages)-475569?style=flat-square" alt="GitHub Pages Ready" />
-    <a href="./LICENSE"><img src="https://img.shields.io/badge/Licencia-MIT-f59e0b?style=flat-square" alt="MIT License" /></a>
-  </p>
-</div>
+<p align="center">
+  <a href="https://unfantasmaenelsistema.github.io/EmojiByte/"><b>▶ Abrir EmojiByte</b></a> ·
+  <a href="#qué-hace">Qué hace</a> ·
+  <a href="#cómo-funciona">Cómo funciona</a> ·
+  <a href="#qué-protege-y-qué-no">Qué protege y qué no</a> ·
+  <a href="#desarrollo">Desarrollo</a> ·
+  <a href="https://www.unfantasmaenelsistema.com">unfantasmaenelsistema.com</a> ·
+  <a href="LICENSE">MIT</a>
+</p>
 
----
+<p align="center">
+  <img src="https://img.shields.io/badge/navegador-sin_servidor-10b981?style=flat-square" alt="Sin servidor">
+  <img src="https://img.shields.io/badge/datos-100%25_locales-0284c7?style=flat-square" alt="Datos 100 % locales">
+  <img src="https://img.shields.io/badge/cifrado-AES--256--GCM-e11d48?style=flat-square" alt="AES-256-GCM">
+  <img src="https://img.shields.io/badge/licencia-MIT-blue?style=flat-square" alt="MIT">
+</p>
 
-## 📋 Descripción General
+<p align="center">
+  <img src="docs/capturas/01-codificador-camuflaje.webp" width="900" alt="Portada de EmojiByte: la frase «Clave de acceso WiFi invitados» codificada con el alfabeto de naturaleza y camuflada dentro de un mensaje de chat, con el inspector byte a byte debajo">
+</p>
 
-**EmojiByte Base256** transforma cualquier flujo de datos (texto ASCII, cadenas internacionales UTF-8, volcados hexadecimales o archivos binarios arbitrarios `Uint8Array`) en una secuencia determinista de emoticonos Unicode y viceversa, utilizando una correspondencia matemática **biyectiva 1:1** donde cada octeto (`0x00` a `0xFF`, 256 valores posibles) se asigna a un único emoticono de punto de código simple.
+Un byte tiene 256 valores posibles; un alfabeto de 256 emojis permite escribir cada byte con un solo emoji y deshacerlo sin perder nada. EmojiByte usa esa idea para enseñar qué es una codificación binario-a-texto (como hexadecimal o Base64), cómo se comprueba la integridad de un mensaje, en qué se diferencia codificar de cifrar y por qué comparar hashes a ojo es más difícil de lo que parece.
 
-Sus dos aplicaciones principales en ciberseguridad y divulgación técnica son:
+> [!NOTE]
+> Todo ocurre en tu navegador: no hay servidor ni peticiones de red (la página lo impide con su política de seguridad de contenidos). Lo que escribes, los archivos que cargas y las contraseñas no salen de tu equipo.
 
-1. **Esteganografía y Ocultación en Conversaciones (Chat / X / Twitter / Mensajería)**:
-   Permite camuflar información sensible, coordenadas o claves dentro de mensajes cotidianos plagados de texto normal. Como el decodificador opera únicamente sobre los puntos de código del alfabeto Base256 seleccionado, **ignora y filtra automáticamente todo el texto de cobertura**, reconstruyendo los bytes originales sin pérdida.
-2. **Huellas Digitales Visuales para Hashes Criptográficos (`SHA-256`, `SHA-512`, `SHA-384`, `SHA-1`)**:
-   Comparar visualmente un hash SHA-256 de 64 caracteres hexadecimales (`8f3ac4197be2...`) es lento y vulnerable a ataques de suplantación parcial (prefijos/sufijos idénticos o ataques homoglifos). Al comprimir cada byte en un icono cromático distinto, un hash SHA-256 de 32 bytes se convierte en **32 emoticonos**, haciendo que cualquier alteración de 1 solo bit sea perceptible en fracciones de segundo gracias al *Efecto Avalancha*.
+## Qué hace
 
----
+- **Codificador y decodificador Base256** para texto UTF-8 (tildes, eñes, símbolos), bytes en hexadecimal (`48 6F 6C 61`, `0xde,0xad`…) o archivos (hasta 2.048 bytes; si el archivo es mayor, avisa de que solo se codifica el principio).
+- **Tres alfabetos disjuntos** de 256 emojis: *Expresivo* (caras, personas, fiesta), *Naturaleza* (fauna, flora, comida) y *Artefactos* (informática, símbolos, transporte). Ningún emoji está en dos alfabetos, así que el decodificador detecta solo con cuál se escribió el mensaje.
+- **Camuflaje**: secuencia pura, mensaje casual de chat, publicación en X/Bluesky o matriz de verificación por bloques. Al decodificar se descarta el texto que rodea a los emojis, y también los selectores `U+FE0F` que añaden algunas apps de mensajería.
+- **Contador del peso en X** con las reglas reales de twitter-text (un emoji cuenta 2, las letras latinas 1) para saber si el mensaje cabe en 280.
+- **CRC-8** opcional al final del mensaje y un botón para **simular la corrupción** de un emoji y ver cómo se detecta.
+- **Cifrado AES-256-GCM** opcional con contraseña (clave derivada con PBKDF2-SHA256, 600.000 iteraciones, sal e IV aleatorios en cada mensaje).
+- **Inspector byte a byte**: carácter → binario → hex → punto de código Unicode → emoji, con cada parte del paquete cifrado marcada como `SAL`, `IV`, `CIFR`, `TAG` y `CRC8`.
+- **Comparador de hashes** SHA-256, SHA-384, SHA-512 y SHA-1 (con aviso de que SHA-1 está roto), huella en emojis, distancia de Hamming en bits y tres casos: efecto avalancha, archivos idénticos y ataque homoglifo (una «а» cirílica en una URL).
+- **Matriz 0x00–0xFF** de cada alfabeto con buscador y un registro de 8 bits para encender y apagar bits.
 
-## 🖼️ Capturas de Pantalla de la Aplicación
+<p align="center">
+  <img src="docs/capturas/02-cifrado-aes-gcm.webp" width="900" alt="Mensaje cifrado con AES-256-GCM: 106 emojis decodificados, CRC-8 íntegro, descifrado correcto y el inspector marcando los primeros bytes como SAL">
+</p>
 
-### 1. Estación de Codificación Biyectiva Base256 e Inspector Byte a Byte
-> Conversión en tiempo real de texto UTF-8, hexadecimal o archivos binarios a emoticonos con suma de verificación **CRC-8**, cifrado opcional por flujo **XOR** y trazabilidad completa de cada octeto (`Carácter ASCII → Binario 8 bits → Hex → Punto de Código Unicode`).
-
-![Captura del Codificador Base256 e Inspector de Bytes](./public/docs/screenshots/01-codificador-base256.svg)
-
----
-
-### 2. Visualizador y Comparador Gráfico de Hashes (Efecto Avalancha y Distancia de Hamming)
-> Comparativa lado a lado de dos entradas mediante `crypto.subtle.digest`, mostrando la huella visual en emoticonos junto al resumen hexadecimal y calculando la **Distancia de Hamming en bits** para demostrar cómo cambiar un solo carácter muta ~50% de los bits del hash.
-
-![Captura del Comparador Gráfico de Hashes SHA-256](./public/docs/screenshots/02-comparador-hashes-sha256.svg)
-
----
-
-### 3. Matriz Completa del Alfabeto Base256 (`0x00`–`0xFF`) y Conmutador Binario de 8 Bits
-> Explorador interactivo de los $2^8 = 256$ estados de un byte con interruptores binarios (`128, 64, 32, 16, 8, 4, 2, 1`), buscador en tiempo real y equivalencia simultánea entre los 3 diccionarios (*Expresivo*, *Naturaleza* y *Artefactos*).
-
-![Captura de la Matriz Base256 y Registro de 8 Bits](./public/docs/screenshots/03-matriz-base256-8bits.svg)
-
----
-
-## ⚙️ Arquitectura Técnica y Flujo de Datos
+## Cómo funciona
 
 ```text
-┌───────────────────────────┐
-│ Entrada (Texto / Hex / B) │
-└─────────────┬─────────────┘
-              ▼
-┌───────────────────────────┐
-│ Buffer UTF-8 (Uint8Array) │  ──► Cálculo de Entropía de Shannon (0.0 – 8.0 bits/B)
-└─────────────┬─────────────┘
-              ▼
-┌───────────────────────────┐
-│ [Opcional] Cifrado XOR    │  ──► Flujo derivado de clave (FNV-1a + xorshift32)
-└─────────────┬─────────────┘
-              ▼
-┌───────────────────────────┐
-│ [Opcional] Checksum CRC-8 │  ──► Polinomio generador 0x07 (x⁸ + x² + x + 1)
-└─────────────┬─────────────┘
-              ▼
-┌───────────────────────────┐
-│ Mapeo Biyectivo Base256   │  ──► Índice 0..255 ──► Punto de Código Unicode (U+1F...)
-└─────────────┬─────────────┘
-              ▼
-┌───────────────────────────┐
-│ Camuflaje Conversacional  │  ──► Inserción en plantillas de Chat / X (Twitter)
-└───────────────────────────┘
+Texto / hex / archivo
+        │  UTF-8 → bytes (Uint8Array)
+        ▼
+[opcional] AES-256-GCM  ──  sal(16) ‖ IV(12) ‖ cifrado ‖ etiqueta(16)   (+44 bytes)
+        │
+[opcional] CRC-8        ──  polinomio 0x07, 1 byte al final
+        │
+Alfabeto Base256        ──  byte 0..255 → 1 emoji (1 punto de código, U+1F3xx–U+1F9xx)
+        │
+Plantilla de camuflaje  ──  chat, X/Bluesky, matriz de bloques…
 ```
 
-### Comparativa frente a otras codificaciones binarias-a-texto
+Para decodificar se recorre el texto, se quedan solo los emojis del alfabeto detectado, se comprueba el CRC-8 y, si hay contraseña, se descifra. AES-GCM no entrega nada si la contraseña es incorrecta o si ha cambiado un solo bit.
 
-| Esquema | Tamaño del Alfabeto | Bits por Símbolo | Símbolos para SHA-256 (32 B) | Bytes UTF-8 en Red (32 B) | Propósito Principal |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **Binario (Base2)** | 2 (`0, 1`) | 1 bit | 256 símbolos | 256 bytes | Inspección a nivel de registros y máscaras lógicas. |
-| **Hexadecimal (Base16)** | 16 (`0-9, a-f`) | 4 bits (1 nibble) | 64 símbolos | 64 bytes | Volcados de memoria y resúmenes tradicionales. |
-| **Base64 (RFC 4648)** | 64 (+ padding `=`) | 6 bits | 44 símbolos | 44 bytes | Transporte de binarios en JSON, MIME y cabeceras HTTP. |
-| **EmojiByte (Base256)** | **256 emojis** | **8 bits (1 byte)** | **32 emoticonos** | 128 bytes (4 B/emoji) | **Verificación visual rápida de hashes y esteganografía en texto.** |
+| Esquema | Alfabeto | Bits por símbolo | Símbolos para un SHA-256 (32 B) | Bytes UTF-8 |
+| :--- | :---: | :---: | :---: | :---: |
+| Binario | 2 | 1 | 256 | 256 |
+| Hexadecimal | 16 | 4 | 64 | 64 |
+| Base64 | 64 | 6 | 44 | 44 |
+| **EmojiByte** | **256** | **8** | **32** | **128** (4 B por emoji) |
 
----
+Los emojis ocupan menos símbolos pero más bytes: sirven para leer y comparar, no para ahorrar espacio.
 
-## 🚀 Instalación y Ejecución Local
+<p align="center">
+  <img src="docs/capturas/03-comparador-hashes.webp" width="900" alt="Comparador de hashes: dos órdenes de transferencia que solo se diferencian en un dígito producen huellas SHA-256 completamente distintas, 129 de 256 bits diferentes">
+</p>
 
-Requisitos previos: **Node.js 18+** y **npm**.
+## Qué protege y qué no
+
+- **Codificar no es cifrar.** Los alfabetos son públicos: sin contraseña, cualquiera con EmojiByte lee el mensaje.
+- **El CRC-8 detecta errores accidentales**, no manipulaciones: quien altere el mensaje puede recalcularlo. La protección contra manipulaciones la da la etiqueta de AES-GCM.
+- **No es esteganografía indetectable.** Una ristra de emojis llama la atención y, si va cifrada, su distribución es casi uniforme, muy distinta de cómo escribe una persona. El camuflaje sirve para entender qué es un canal encubierto.
+- **Comparar emojis es una ayuda, no una prueba.** Hay emojis muy parecidos (😀 😃 😄); el comparador calcula la diferencia bit a bit, y eso es lo que vale.
+- **Algunas apps cambian los emojis** al enviarlos (por imágenes o variantes). El decodificador tolera `U+FE0F`; cualquier otro cambio corrompe el mensaje y el CRC-8 lo avisa.
+
+La pestaña *Seguridad y límites* de la app explica además por qué un «XOR con contraseña» casero no protege nada (reutilización de clave y espacio de 2³² estados).
+
+<p align="center">
+  <img src="docs/capturas/04-matriz-base256.webp" width="900" alt="Matriz del alfabeto Expresivo con los 256 emojis, el byte 0x41 seleccionado y el registro de 8 bits con los bits 64 y 1 encendidos">
+</p>
+
+## Desarrollo
+
+Requisitos: Node.js 20 o superior.
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/TU_USUARIO/emojibyte-base256.git
-cd emojibyte-base256
-
-# 2. Instalar dependencias
-npm install
-
-# 3. Iniciar servidor de desarrollo (http://localhost:3000)
-npm run dev
-
-# 4. Compilar versión de producción estática en ./dist
-npm run build
+git clone https://github.com/unfantasmaenelsistema/EmojiByte.git
+cd EmojiByte
+npm ci
+npm run dev      # http://localhost:3000
+npm test         # 23 tests del motor (alfabetos, CRC-8, AES-GCM, camuflaje…)
+npm run lint     # comprobación de tipos
+npm run build    # versión estática en dist/
 ```
 
----
-
-## 🌐 Despliegue Automático en GitHub Pages
-
-El proyecto está configurado nativamente para **GitHub Pages** sin necesidad de modificar rutas ni configurar servidores:
-
-1. `vite.config.ts` utiliza `base: './'` (rutas relativas), por lo que la aplicación funciona tanto en un dominio raíz (`https://tudominio.com/`) como en una subruta de repositorio (`https://usuario.github.io/nombre-repo/`).
-2. Incluye `/public/.nojekyll` para evitar que GitHub Pages ignore archivos estáticos.
-3. Incluye el flujo de trabajo automatizado en [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml).
-
-### Pasos para activar GitHub Pages en tu repositorio:
-1. Sube este código a la rama `main` de tu repositorio en GitHub:
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: lanzamiento inicial de EmojiByte Base256"
-   git branch -M main
-   git remote add origin https://github.com/TU_USUARIO/TU_REPOSITORIO.git
-   git push -u origin main
-   ```
-2. En tu repositorio de GitHub, ve a **Settings → Pages**.
-3. En **Build and deployment → Source**, selecciona **GitHub Actions**.
-4. El workflow `Desplegar EmojiByte en GitHub Pages` compilará y publicará automáticamente la aplicación en cada `push`.
-
----
-
-## 📂 Estructura del Proyecto
+Cada `push` a `main` pasa por el workflow [`deploy.yml`](.github/workflows/deploy.yml) (tipos, tests y build) y se publica en GitHub Pages. Los pull requests ejecutan las mismas comprobaciones sin publicar.
 
 ```text
-├── .github/workflows/
-│   └── deploy.yml                  # CI/CD automático para GitHub Pages
-├── public/
-│   ├── .nojekyll                   # Desactiva Jekyll en GitHub Pages
-│   ├── assets/aistudio/
-│   │   └── icono_81a3db5b.png      # Logotipo oficial de Un Fantasma en el Sistema
-│   └── docs/screenshots/           # Capturas en alta resolución para el README
-│       ├── 01-codificador-base256.svg
-│       ├── 02-comparador-hashes-sha256.svg
-│       └── 03-matriz-base256-8bits.svg
-├── src/
-│   ├── components/
-│   │   ├── AlphabetMatrixExplorer.tsx  # Matriz 0x00-0xFF y registro interactivo de 8 bits
-│   │   ├── EducationalGuideSection.tsx # Documentación, comparativa y kit GitHub
-│   │   └── HashComparatorLab.tsx       # Comparador visual SHA-256 y Efecto Avalancha
-│   ├── lib/
-│   │   └── emojiCodec.ts           # Motor biyectivo Base256, CRC-8, XOR y Web Crypto
-│   ├── App.tsx                     # Interfaz principal de la aplicación
-│   ├── index.css                   # Configuración Tailwind CSS v4 y tipografía
-│   └── main.tsx                    # Punto de entrada React
-├── index.html                      # Metadatos SEO, OpenGraph y fuentes
-├── LICENSE                         # Licencia MIT
-├── package.json                    # Scripts y dependencias
-└── vite.config.ts                  # Configuración Vite con base: './'
+src/
+├── lib/emojiCodec.ts            Alfabetos, CRC-8, AES-GCM, codificación, camuflaje y hashes
+├── lib/emojiCodec.test.ts       Tests del motor (Vitest)
+├── App.tsx                      Codificador, decodificador e inspector
+└── components/
+    ├── HashComparatorLab.tsx    Comparador de hashes y efecto avalancha
+    ├── AlphabetMatrixExplorer.tsx  Matriz 0x00–0xFF y registro de 8 bits
+    └── EducationalGuideSection.tsx Fundamentos, seguridad y comparativa
 ```
 
----
+> [!IMPORTANT]
+> Las tablas de `PALETTE_RANGES` son el «idioma» de los mensajes: si se cambian, los mensajes codificados antes dejan de poder leerse. Un test fija su huella SHA-256 para que no cambien sin querer.
 
-## 👤 Autoría y Créditos
+## Novedades de la versión 2
 
-Desarrollado para **[Un Fantasma en el Sistema](https://www.unfantasmaenelsistema.com/)** — Divulgación, ciberseguridad, criptografía y herramientas técnicas.
+- Alfabetos rehechos: sin emojis que se ven como texto o como un cuadro vacío (👁 🍽 🐿 🌶 📽 y U+1F4FE) y sin emojis compartidos entre alfabetos. **Los mensajes codificados con la versión 1 no son compatibles.**
+- El «cifrado XOR» (xorshift de 32 bits sin sal ni IV) se sustituye por AES-256-GCM con PBKDF2.
+- Avisos de archivo truncado y de hexadecimal con dígitos impares; insertar un byte no imprimible desde la matriz pasa a modo hexadecimal en lugar de escribir el texto `[0x01]`.
+- Peso en X calculado con las reglas de twitter-text; se ignoran los `U+FE0F` al decodificar.
+- Se arregla la instalación con npm (conflicto de dependencias) y se quitan dependencias que no se usaban (Gemini, Express, dotenv).
+- Capturas reales, política de seguridad de contenidos, tema claro/oscuro recordado y diseño sin desbordes en móvil.
 
-- 🌐 Sitio web oficial: [https://www.unfantasmaenelsistema.com/](https://www.unfantasmaenelsistema.com/)
-- 📄 Licencia: Distribuido bajo la licencia [MIT](./LICENSE).
+## Créditos y licencia
+
+Desarrollado para **[Un Fantasma en el Sistema](https://www.unfantasmaenelsistema.com)**. Distribuido bajo licencia [MIT](LICENSE).
