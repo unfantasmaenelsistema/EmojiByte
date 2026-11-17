@@ -4,6 +4,7 @@ import {
   DICTIONARIES,
   DICTIONARY_IDS,
   ENCRYPTION_OVERHEAD,
+  isValidUtf8,
   computeBitHammingDistance,
   computeCRC8,
   computeCryptoHash,
@@ -178,5 +179,17 @@ describe('utilidades', () => {
       percentage: 25,
       differingBytes: 1,
     });
+  });
+});
+
+describe('isValidUtf8', () => {
+  it('acepta texto UTF-8 y rechaza bytes que no lo son', async () => {
+    expect(isValidUtf8(new TextEncoder().encode('Hola, españa 👻 раypal'))).toBe(true);
+    expect(isValidUtf8(new Uint8Array([0xc3, 0x28]))).toBe(false);
+    expect(isValidUtf8(new Uint8Array(0))).toBe(true);
+    // Un paquete cifrado (sal + IV + datos + etiqueta) casi nunca es UTF-8 válido
+    const packed = await encryptPayload(new TextEncoder().encode('Revisa: www.ejemplo.es'), 'clave');
+    expect(packed.length).toBeGreaterThanOrEqual(ENCRYPTION_OVERHEAD);
+    expect(isValidUtf8(packed)).toBe(false);
   });
 });

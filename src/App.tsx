@@ -16,6 +16,7 @@ import {
   decryptPayload,
   encodeBytesToEmojis,
   encryptPayload,
+  isValidUtf8,
   parseHexInput,
   toHex,
   twitterWeightedLength,
@@ -40,6 +41,8 @@ import {
   MessageSquare,
   Shuffle,
   Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 type CodecDirection = 'encode' | 'decode';
@@ -123,6 +126,7 @@ export default function App() {
   const [dictionaryId, setDictionaryId] = useState<DictionaryId>('standard');
   const [includeCRC8, setIncludeCRC8] = useState<boolean>(true);
   const [passphrase, setPassphrase] = useState<string>('');
+  const [showPassphrase, setShowPassphrase] = useState(false);
   const [camouflageId, setCamouflageId] = useState<string>('direct');
   const [spacing, setSpacing] = useState<Spacing>('none');
 
@@ -249,6 +253,11 @@ export default function App() {
       ? decrypt.plain
       : new Uint8Array(0);
   const decodedText = useMemo(() => new TextDecoder('utf-8', { fatal: false }).decode(decodedBytes), [decodedBytes]);
+  // Sin contraseña, un mensaje cifrado se decodifica a bytes que no son texto: avisar en vez de mostrar solo un galimatías.
+  const looksEncryptedOrBinary = useMemo(
+    () => direction === 'decode' && decryptStatus === 'none' && decodedBytes.length > ENCRYPTION_OVERHEAD && !isValidUtf8(decodedBytes),
+    [direction, decryptStatus, decodedBytes]
+  );
   const decodedHex = useMemo(() => toHex(decodedBytes), [decodedBytes]);
 
   const twitterCharWeight = useMemo(() => twitterWeightedLength(camouflagedOutput), [camouflagedOutput]);
@@ -618,16 +627,33 @@ export default function App() {
                     }`}
                   />
                 )}
+                {/* type="text" enmascarado (no type="password"): esta página no es un inicio de sesión y no debe parecerlo */}
                 <input
-                  type="password"
+                  type="text"
                   aria-label="Contraseña opcional para cifrar con AES-256-GCM"
                   title={`Opcional. Cifra con AES-256-GCM; la clave se deriva con PBKDF2-SHA256 (${PBKDF2_ITERATIONS.toLocaleString('es-ES')} iteraciones). Añade ${ENCRYPTION_OVERHEAD} bytes (sal, IV y etiqueta).`}
                   value={passphrase}
                   onChange={(e) => setPassphrase(e.target.value)}
                   placeholder="Contraseña AES (opcional)"
-                  autoComplete="new-password"
-                  className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 w-52 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  style={showPassphrase ? undefined : ({ WebkitTextSecurity: 'disc' } as React.CSSProperties)}
+                  className="pl-8 pr-8 py-1.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 w-60 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassphrase((v) => !v)}
+                  aria-label={showPassphrase ? 'Ocultar la contraseña' : 'Mostrar la contraseña'}
+                  aria-pressed={showPassphrase}
+                  title={showPassphrase ? 'Ocultar la contraseña' : 'Mostrar la contraseña'}
+                  className="absolute right-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  {showPassphrase ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
               </div>
             </div>
           </div>
@@ -1082,6 +1108,16 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* Aviso: sin contraseña, un mensaje cifrado no forma texto */}
+                    {looksEncryptedOrBinary && (
+                      <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 text-xs font-medium text-amber-700 dark:text-amber-300">
+                        <Lock className="w-4 h-4 shrink-0" />
+                        <span>
+                          Estos {decodedBytes.length} bytes no forman texto UTF-8. Si el mensaje se cifró con contraseña, escríbela arriba
+                          para descifrarlo con AES-256-GCM; si es un archivo binario, es normal (usa «Descargar .bin»).
+                        </span>
+                      </div>
+                    )}
                     {/* Cadena de Texto Decodificada */}
                     <div className="space-y-1.5">
                       <div className="text-xs text-slate-500 dark:text-slate-400">
