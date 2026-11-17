@@ -104,7 +104,7 @@ git clone https://github.com/unfantasmaenelsistema/EmojiByte.git
 cd EmojiByte
 npm ci
 npm run dev      # http://localhost:3000
-npm test         # 23 tests del motor (alfabetos, CRC-8, AES-GCM, camuflaje…)
+npm test         # 24 tests del motor (alfabetos, CRC-8, AES-GCM, camuflaje…)
 npm run lint     # comprobación de tipos
 npm run build    # versión estática en dist/
 ```
@@ -124,6 +124,11 @@ src/
 
 > [!IMPORTANT]
 > Las tablas de `PALETTE_RANGES` son el «idioma» de los mensajes: si se cambian, los mensajes codificados antes dejan de poder leerse. Un test fija su huella SHA-256 para que no cambien sin querer.
+
+## Novedades de la versión 2.1
+
+- El campo de la contraseña AES ya no es un `input type="password"`: es un campo de texto enmascarado con un botón para mostrarla. La página no es un inicio de sesión y no debe parecerlo a los filtros antiphishing.
+- Al decodificar un mensaje cifrado sin contraseña, la app avisa de que los bytes no forman texto UTF-8 y de que puede ir cifrado, en lugar de mostrar solo un galimatías.
 
 ## Novedades de la versión 2
 

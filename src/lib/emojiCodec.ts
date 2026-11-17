@@ -272,6 +272,16 @@ export function formatByteAscii(b: number): string {
   return '·';
 }
 
+/** ¿Los bytes son texto UTF-8 válido? Sirve para avisar de que un mensaje puede ir cifrado o ser binario. */
+export function isValidUtf8(bytes: Uint8Array): boolean {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function toHex(bytes: Uint8Array, separator = ' '): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).toUpperCase().padStart(2, '0'))

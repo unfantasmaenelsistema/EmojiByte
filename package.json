@@ -1,7 +1,7 @@
 {
   "name": "emojibyte-base256",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Codificador biyectivo Base256 de cadenas ASCII, UTF-8 y objetos byte en emoticonos, ocultación en chats y visualizador gráfico de hashes criptográficos. Por Un Fantasma en el Sistema.",
   "author": "Un Fantasma en el Sistema <https://www.unfantasmaenelsistema.com/>",
   "license": "MIT",
